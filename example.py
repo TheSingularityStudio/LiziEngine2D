@@ -1,7 +1,8 @@
 import lizilib
 
 if __name__ == '__main__':
-    # 创建一个空地图
-    map = lizilib.empty_dianchang(10, 10)
+    # 创建一个10x10的二维电场
+    E = lizilib.empty_grid(10, 10)
     # 创建一个粒子
-    lizi1 = lizilib.lizi((5, 5), 10, 1, 0.1)
+    lizi1 = lizilib.lizi(zuobiao=(5, 5), dianhe=1, sudu=(0, 0), jiasudu=(0, 0))
+    

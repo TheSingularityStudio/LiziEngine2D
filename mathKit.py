@@ -3,5 +3,5 @@ import math
 import numpy as np
 
 #双线插值，输入网格对象及坐标，返回插值结果
-def chazhi(grid, zuobiao: np.ndarray):
+def chazhi(grid, zuobiao: list[float, float]):
     return grid.interp(zuobiao)
