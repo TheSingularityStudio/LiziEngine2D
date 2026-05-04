@@ -22,3 +22,6 @@ class lizi:
         # 计算电场力
         fx, fy = self.q * mk.chazhi(E, self.coord)
         return list[fx, fy]
+
+    def chendian(self, E: np.ndarray):
+        # 沉淀电荷，记录电荷量和位置

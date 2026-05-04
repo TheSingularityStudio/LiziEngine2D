@@ -1,4 +1,5 @@
 import lizilib
+import matplotlib.pyplot as plt
 
 if __name__ == '__main__':
     # 创建一个10x10的二维电场
