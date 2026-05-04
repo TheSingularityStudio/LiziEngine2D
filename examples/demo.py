@@ -6,6 +6,10 @@ LiziEngine2D 演示 - 独立运行
 import sys
 import os
 
+# Add project root to Python path for local package imports
+project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, project_root)
+
 from lizi_engine.core.app import run_demo
 
 if __name__ == "__main__":
