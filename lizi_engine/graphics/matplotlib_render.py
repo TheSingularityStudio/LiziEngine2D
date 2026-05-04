@@ -53,7 +53,7 @@ class MatplotlibRenderer:
             xs = [m['x'] for m in markers]
             ys = [m['y'] for m in markers]
             sizes = [m['mag'] * 100 for m in markers]
-            self.ax.scatter(xs, ys, c=marker_color, s=sizes, alpha=0.9, edgecolors='white', linewidth=0.5)
+            self.ax.scatter(xs, ys, color=marker_color, s=sizes, alpha=0.9, edgecolors='white', linewidth=0.5)
         
         if show_grid:
             self.ax.grid(True, alpha=0.3, color='gray')

@@ -4,7 +4,7 @@
 """
 from typing import List, Dict, Tuple
 import numpy as np
-from .compute.cpu_vector import CPUVectorCalculator
+from .cpu_vector import CPUVectorCalculator
 
 class MarkerSystem:
     """标记系统 - 向量场驱动的粒子模拟"""

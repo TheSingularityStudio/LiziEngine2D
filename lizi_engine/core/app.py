@@ -9,7 +9,7 @@ from typing import Optional
 import matplotlib.pyplot as plt
 
 from ..compute.cpu_vector import CPUVectorCalculator
-from ..markers import MarkerSystem
+from ..compute.markers import MarkerSystem
 from ..graphics.matplotlib_render import MatplotlibRenderer
 
 class LiziApp:
@@ -76,7 +76,7 @@ class LiziApp:
             self.markers.add_marker(
                 random.uniform(50, w-50),
                 random.uniform(50, h-50),
-                mag=random.uniform(0.5, 2.0)
+                mag=random.uniform(-1.0, 1.0)
             )
         print(f"添加 {count} 个随机标记")
     
@@ -123,5 +123,5 @@ class LiziApp:
 # 便捷运行
 def run_demo(config_path: str = "lizi_engine/config.json"):
     app = LiziApp(config_path)
-    app.add_markers_random(30)
+    app.add_markers_random(5)
     app.run(steps=2000, delay=0.03)
