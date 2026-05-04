@@ -1,0 +1,15 @@
+{
+    "grid_width": 320,
+    "grid_height": 240,
+    "cell_size": 2.0,
+    "vector_self_weight": 0.2,
+    "vector_neighbor_weight": 0.2,
+    "vector_scale": 20.0,
+    "show_grid": true,
+    "vector_color": [0.2, 0.6, 1.0],
+    "marker_color": [1.0, 0.2, 0.2],
+    "background_color": [0.05, 0.05, 0.1],
+    "gravity": 0.01,
+    "speed_factor": 0.95,
+    "compute_iterations": 1
+}
