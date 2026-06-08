@@ -1,0 +1,230 @@
+"""
+Controller 插件：处理复杂的业务逻辑
+将 UI 模块中的复杂功能分离出来，便于维护和扩展。
+"""
+from typing import Tuple
+import numpy as np
+from lizi_engine.input import input_handler
+
+
+class Controller:
+    def __init__(self, app_core, vector_calculator, marker_system, grid: np.ndarray):
+        self.app_core = app_core
+        self.vector_calculator = vector_calculator
+        self.marker_system = marker_system
+        self.grid = grid
+
+        # 向量场方向状态：True表示朝外，False表示朝内
+        self.vector_field_direction = True
+
+    def _screen_to_grid(self, mx: float, my: float) -> Tuple[float, float]:
+        """将屏幕坐标转换为网格坐标"""
+        cam_x = self.app_core.state_manager.get("cam_x", 0.0)
+        cam_y = self.app_core.state_manager.get("cam_y", 0.0)
+        cam_zoom = self.app_core.state_manager.get("cam_zoom", 1.0)
+        viewport_width = self.app_core.state_manager.get("viewport_width", 800)
+        viewport_height = self.app_core.state_manager.get("viewport_height", 600)
+        cell_size = self.app_core.state_manager.get("cell_size", 1.0)
+
+        world_x = cam_x + (mx - (viewport_width / 2.0)) / cam_zoom
+        world_y = cam_y + (my - (viewport_height / 2.0)) / cam_zoom
+
+        gx = world_x / cell_size
+        gy = world_y / cell_size
+
+        return gx, gy
+
+    def reset_view(self):
+        """重置视图"""
+        try:
+            self.app_core.view_manager.reset_view(self.grid.shape[1], self.grid.shape[0])
+        except Exception as e:
+            print(f"[错误] reset_view 异常: {e}")
+
+    def toggle_grid(self):
+        """切换网格显示"""
+        show_grid = self.app_core.state_manager.get("show_grid", True)
+        self.app_core.state_manager.set("show_grid", not show_grid)
+
+    def clear_grid(self):
+        """清空网格"""
+        try:
+            self.grid.fill(0.0)
+        except Exception as e:
+            print(f"[错误] clear_grid 异常: {e}")
+
+    def switch_vector_field_direction(self):
+        """切换向量场方向"""
+        try:
+            self.vector_field_direction = not self.vector_field_direction
+            direction = "朝外" if self.vector_field_direction else "朝内"
+            print(f"[示例] 向量场方向已切换为: {direction}")
+        except Exception as e:
+            print(f"[错误] 切换向量场方向 异常: {e}")
+
+    def add_marker(self, x: float, y: float, mag: float = 1.0):
+        """在指定位置添加标记"""
+        try:
+            self.marker_system.add_marker(float(x), float(y), float(mag))
+            print(f"[控制器] 已添加标记: 位置({x}, {y}), 幅值{mag}")
+        except Exception as e:
+            print(f"[错误] 添加标记异常: {e}")
+
+    def clear_markers(self):
+        """清除所有标记"""
+        try:
+            self.marker_system.clear_markers()
+            print("[控制器] 已清除所有标记")
+        except Exception as e:
+            print(f"[错误] 清除标记异常: {e}")
+
+    def set_compute_device(self, device: str):
+        """设置计算设备"""
+        try:
+            if device.lower() not in ["cpu", "gpu"]:
+                print(f"[错误] 无效的设备类型: {device}，应为 'cpu' 或 'gpu'")
+                return
+            success = self.vector_calculator.set_device(device.lower())
+            if success:
+                print(f"[控制器] 计算设备已设置为: {device.upper()}")
+            else:
+                print(f"[错误] 无法设置为设备: {device.upper()}")
+        except Exception as e:
+            print(f"[错误] 设置计算设备异常: {e}")
+
+    def set_gravity(self, value: float):
+        """设置重力加速度"""
+        try:
+            # 这里需要通过状态管理器或其他方式设置重力值
+            # 假设重力值存储在状态管理器中
+            self.app_core.state_manager.set("gravity", float(value))
+            print(f"[控制器] 重力加速度已设置为: {value}")
+        except Exception as e:
+            print(f"[错误] 设置重力异常: {e}")
+
+    def set_speed_factor(self, value: float):
+        """设置速度衰减因子"""
+        try:
+            # 这里需要通过状态管理器或其他方式设置速度因子
+            # 假设速度因子存储在状态管理器中
+            self.app_core.state_manager.set("speed_factor", float(value))
+            print(f"[控制器] 速度衰减因子已设置为: {value}")
+        except Exception as e:
+            print(f"[错误] 设置速度因子异常: {e}")
+
+    def place_vector_field(self, mx: float, my: float):
+        """在鼠标位置放置向量场"""
+        try:
+            gx, gy = self._screen_to_grid(mx, my)
+
+            h, w = self.grid.shape[:2]
+            if gx < 0 or gx >= w or gy < 0 or gy >= h:
+                print(f"[示例] 点击位置超出网格: ({gx}, {gy})")
+                return
+
+            mag = 1.0  # 固定向量大小
+            magnitude = mag if self.vector_field_direction else -mag
+
+            # 同时创建一个标记，初始放在点击处（浮点位置）
+            self.marker_system.add_marker(gx, gy, float(magnitude))
+
+            self.app_core.state_manager.update({"view_changed": True, "grid_updated": True})
+        except Exception as e:
+            print(f"[错误] 处理f键按下时发生异常: {e}")
+
+    def handle_mouse_left_press(self, mx: float, my: float) -> dict:
+        """处理鼠标左键按下，返回选中的标记"""
+        try:
+            gx, gy = self._screen_to_grid(mx, my)
+
+            h, w = self.grid.shape[:2]
+            if gx < 0 or gx >= w or gy < 0 or gy >= h:
+                print(f"[示例] 点击位置超出网格: ({gx}, {gy})")
+                return None
+
+            # 获取所有标记
+            markers = self.marker_system.get_markers()
+            if not markers:
+                print("[示例] 没有可用的标记")
+                return None
+
+            # 找到最近的标记
+            min_dist = float('inf')
+            closest_marker = None
+            threshold = 5.0  # 设置一个阈值，用于判断标记是否在点击位置附近
+            for marker in markers:
+                marker_x = marker["x"]
+                marker_y = marker["y"]
+                dist = ((marker_x - gx) ** 2 + (marker_y - gy) ** 2) ** 0.5
+                if dist < min_dist:
+                    min_dist = dist
+                    closest_marker = marker
+
+            if closest_marker is None or min_dist > threshold:
+                print("[示例] 未找到最近的标记或超出选择阈值")
+                return None
+
+            return closest_marker
+        except Exception as e:
+            print(f"[错误] 处理鼠标左键按下时发生异常: {e}")
+            return None
+
+    def handle_mouse_drag(self, mx: float, my: float, selected_marker: dict):
+        """处理鼠标拖拽时的向量添加"""
+        if selected_marker is None:
+            return
+
+        try:
+            gx, gy = self._screen_to_grid(mx, my)
+
+            h, w = self.grid.shape[:2]
+            if gx >= 0 and gx < w and gy >= 0 and gy < h:
+                # 计算从标记到鼠标位置的方向向量
+                vx = gx - selected_marker["x"]
+                vy = gy - selected_marker["y"]
+
+                vx *= 0.1  # 缩放向量以控制影响范围
+                vy *= 0.1
+                # 使用微小向量创建函数
+                self.marker_system.add_vector_at_position(self.grid, x=selected_marker["x"], y=selected_marker["y"], vx=vx, vy=vy)
+
+                self.app_core.state_manager.update({"view_changed": True, "grid_updated": True})
+        except Exception as e:
+            print(f"[错误] 处理左键持续按下时发生异常: {e}")
+
+    def handle_mouse_drag_view(self, dx: float, dy: float):
+        """处理视图拖拽"""
+        try:
+            cam_zoom = self.app_core.state_manager.get("cam_zoom", 1.0)
+
+            world_dx = dx / cam_zoom
+            world_dy = dy / cam_zoom
+
+            cam_x = self.app_core.state_manager.get("cam_x", 0.0) - world_dx
+            cam_y = self.app_core.state_manager.get("cam_y", 0.0) - world_dy
+
+            self.app_core.state_manager.update({
+                "cam_x": cam_x,
+                "cam_y": cam_y,
+                "view_changed": True
+            })
+        except Exception as e:
+            print(f"[错误] 处理视图拖拽 异常: {e}")
+
+    def handle_scroll_zoom(self, scroll_y: float):
+        """处理滚轮缩放"""
+        try:
+            cam_zoom = self.app_core.state_manager.get("cam_zoom", 1.0)
+            zoom_speed = 0.5
+            zoom_min = 0.1
+            zoom_max = 10.0
+            cam_zoom += scroll_y * zoom_speed
+            cam_zoom = max(zoom_min, min(zoom_max, cam_zoom))
+
+            self.app_core.state_manager.update({
+                "cam_zoom": cam_zoom,
+                "view_changed": True
+            })
+        except Exception as e:
+            print(f"[错误] 处理滚轮缩放 异常: {e}")
+
