@@ -70,3 +70,20 @@ class ElectrostaticSim2D:
                 # 记录（snapshots）粒子位置，用于后续可视化/调试
                 frames.append(np.stack([self.particles.x, self.particles.y], axis=1))
         return {"positions": np.array(frames, dtype=np.float64)}
+
+    def get_state_snapshot(self) -> dict[str, np.ndarray]:
+        """
+        获取当前仿真状态快照（用于可视化/调试）。
+        要求：compute_fields() 至少执行过一次，确保 V/Ex/Ey 存在。
+        """
+        if self.V is None or self.Ex is None or self.Ey is None:
+            # 若用户直接在首次 step 前调用，则强制计算一次
+            self.compute_fields()
+
+        return {
+            "x": self.particles.x.copy(),
+            "y": self.particles.y.copy(),
+            "V": self.V.copy(),   # (nx, ny)
+            "Ex": self.Ex.copy(), # (nx, ny)
+            "Ey": self.Ey.copy(), # (nx, ny)
+        }

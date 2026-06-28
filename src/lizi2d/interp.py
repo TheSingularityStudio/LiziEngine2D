@@ -26,7 +26,7 @@ def gather_field_to_particles_bilinear(
     """
     nx, ny = grid.shape
 
-    # Periodic wrap particle coords
+    # 周期性包裹粒子坐标
     lx = nx * grid.dx
     ly = ny * grid.dy
     xw = np.mod(particles.x, lx)
@@ -47,7 +47,7 @@ def gather_field_to_particles_bilinear(
     wy0 = 1.0 - fy
     wy1 = fy
 
-    # Bilinear interpolation
+    # 双线性插值
     Ex_p = (
         Ex[i0, j0] * wx0 * wy0
         + Ex[i1, j0] * wx1 * wy0
