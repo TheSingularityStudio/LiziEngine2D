@@ -9,16 +9,20 @@ from src.lizi2d.sim import ElectrostaticSim2D
 from src.lizi2d.interp import gather_field_to_particles_bilinear
 
 
-def compute_E_for_charges(grid: Grid2D, charges: list[tuple[float, float, float]], *, eps: float) -> tuple[np.ndarray, np.ndarray]:
+def compute_E_for_charges(
+    grid: Grid2D,
+    charges: list[tuple[float, float, float]],
+    *,
+    eps: float,
+) -> tuple[np.ndarray, np.ndarray]:
     particles = ParticleState.zeros(len(charges))
     for i, (x, y, _q) in enumerate(charges):
         particles.x[i] = x
         particles.y[i] = y
 
-    # Unit-magnitude charges only in current engine; emulate negative by two runs and subtraction
-    # For now, assume q is either +1 or -1.
-    # We'll do:
-    #   V = V(+1 set) - V(-1 set)
+    # 当前引擎只支持单位幅值电荷（q 的离散值为 +1 或 -1）。
+    # 为了处理负电荷：用两次计算得到
+    #   E = E(+1集合) - E(-1集合)
     pos = [(x, y, q) for (x, y, q) in charges if q > 0]
     neg = [(x, y, q) for (x, y, q) in charges if q < 0]
 
@@ -52,7 +56,7 @@ def main() -> None:
 
     grid = Grid2D(nx=args.nx, ny=args.ny, dx=args.dx, dy=args.dy)
 
-    # Two +1 charges at fixed positions; compare with superposition:
+    # 在固定位置放置两个 +1 电荷，验证叠加原理：
     # E_total = E1 + E2
     x1, y1 = 0.25 * grid.nx * grid.dx, 0.5 * grid.ny * grid.dy
     x2, y2 = 0.75 * grid.nx * grid.dx, 0.5 * grid.ny * grid.dy
@@ -63,7 +67,7 @@ def main() -> None:
     Ex1, Ey1 = compute_E_for_charges(grid, [(x1, y1, +1.0)], eps=args.eps)
     Ex2, Ey2 = compute_E_for_charges(grid, [(x2, y2, +1.0)], eps=args.eps)
 
-    # Sample points and compare
+    # 采样若干点上的电场并比较
     Nq = 200
     rng = np.random.default_rng(0)
     xs = rng.random(Nq) * grid.nx * grid.dx
@@ -80,15 +84,15 @@ def main() -> None:
     Ex_pred = Exq_1 + Exq_2
     Ey_pred = Eyq_1 + Eyq_2
 
-    # Relative L2 error
+    # 相对 L2 误差
     denom = np.linalg.norm(Exq_total) + np.linalg.norm(Eyq_total) + 1e-15
     num = np.linalg.norm(Ex_pred - Exq_total) + np.linalg.norm(Ey_pred - Eyq_total)
     rel = float(num / denom)
 
-    print(f"[validate_two_charges] relative_L2_error={rel:.6e}")
+    print(f"[validate_two_charges] 相对L2误差 relative_L2_error={rel:.6e}")
     if rel > 5e-2:
         raise SystemExit(2)
-    print("OK")
+    print("OK：两电荷叠加验证通过")
 
 
 if __name__ == "__main__":

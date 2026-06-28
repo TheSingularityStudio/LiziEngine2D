@@ -7,8 +7,11 @@ import numpy as np
 @dataclass
 class ParticleState:
     """
-    Positions/velocities/forces are stored as float64 for stability in validation.
-    For performance you can switch to float32 later.
+    粒子状态数据结构。
+
+    x/y: 位置（连续世界坐标，周期边界内）
+    vx/vy: 速度
+    fx/fy: 受力（由电场计算得到）
     """
     x: np.ndarray  # shape (N,)
     y: np.ndarray  # shape (N,)
@@ -19,6 +22,9 @@ class ParticleState:
 
     @staticmethod
     def zeros(n: int, seed: int | None = None) -> "ParticleState":
+        """
+        创建 n 个粒子：位置初始化为随机值，速度/力初始化为 0。
+        """
         rng = np.random.default_rng(seed)
         x = rng.random(n)
         y = rng.random(n)
@@ -32,6 +38,7 @@ class ParticleState:
         )
 
     def copy(self) -> "ParticleState":
+        """深拷贝一份粒子状态。"""
         return ParticleState(
             x=self.x.copy(),
             y=self.y.copy(),
@@ -42,4 +49,5 @@ class ParticleState:
         )
 
     def as_dict(self) -> dict[str, np.ndarray]:
+        """导出为 dict，便于调试/序列化。"""
         return {"x": self.x, "y": self.y, "vx": self.vx, "vy": self.vy, "fx": self.fx, "fy": self.fy}

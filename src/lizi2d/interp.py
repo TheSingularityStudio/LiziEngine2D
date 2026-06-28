@@ -13,15 +13,16 @@ def gather_field_to_particles_bilinear(
     Ey: np.ndarray,
 ) -> tuple[np.ndarray, np.ndarray]:
     """
-    Bilinear gather of vector field defined on grid nodes to particle positions.
+    将定义在网格节点上的电场矢量场（Ex, Ey）通过双线性插值（gather）
+    采样到粒子位置，得到粒子的受力分量（q=1 时 F=E）。
 
-    Assumptions:
-    - particles.x/y in continuous world coords on periodic domain.
-    - Ex,Ey are shape (nx,ny).
-    - Uses same weighting scheme as scatter_unit_charges_to_grid.
+    前提/假设：
+    - 粒子坐标 (x,y) 在周期域内（越界后自动按周期包裹）
+    - Ex/Ey 的 shape 为 (nx, ny)
+    - 插值权重体系与 scatter_unit_charges_to_grid 保持一致（双线性权重）
 
-    Returns:
-      fx, fy arrays shape (N,)
+    返回：
+      fx, fy：shape = (N,) 的粒子电场采样值
     """
     nx, ny = grid.shape
 

@@ -24,27 +24,27 @@ def main() -> None:
     grid = Grid2D(nx=args.nx, ny=args.ny, dx=args.dx, dy=args.dy)
 
     particles = ParticleState.zeros(args.N, seed=args.seed)
-    # Start with small random velocities to exercise integration
+    # 使用较小的随机初速度来触发积分过程（避免全零速度导致的“表面正确”）
     rng = np.random.default_rng(args.seed + 123)
     particles.vx = (rng.random(args.N) - 0.5) * 0.02
     particles.vy = (rng.random(args.N) - 0.5) * 0.02
 
     sim = ElectrostaticSim2D(grid, particles, eps_poisson=args.eps)
 
-    max_speed_hist = []
+    max_speed_hist: list[float] = []
     for _ in range(args.steps):
         sim.step(args.dt)
         speed = np.sqrt(sim.particles.vx**2 + sim.particles.vy**2)
         max_speed_hist.append(float(np.max(speed)))
 
     max_speed = max(max_speed_hist)
-    print(f"[validate_random] max_speed over steps = {max_speed:.6e}")
+    print(f"[validate_random] 多步最大速度 = {max_speed:.6e}")
 
-    # Heuristic stability threshold. Adjust later if needed.
+    # 启发式稳定性阈值（后续可按需求调节）
     if max_speed > 50.0:
         raise SystemExit(2)
 
-    print("OK")
+    print("OK：随机初始条件下的数值稳定性验证通过")
 
 
 if __name__ == "__main__":

@@ -12,13 +12,15 @@ from .integrator import step_half_implicit_euler
 
 class ElectrostaticSim2D:
     """
-    PIC-like electrostatic simulator (unit charges, unit mass).
-    Pipeline per step:
-      1) scatter particles -> rho grid
-      2) solve Poisson (periodic) -> V grid via FFT spectral method
-      3) compute E = -grad(V) on grid
-      4) gather E to particle positions -> particle forces (q=1 => F=E)
-      5) integrate particles with semi-implicit Euler
+    2D 静电（电场-粒子）CPU 模拟器（PIC 风格实现；单位电荷、单位质量）。
+
+    每个时间步的计算流程：
+      1) 将粒子散射到网格上，得到离散电荷密度 rho
+      2) 在周期边界条件下求解 Poisson：通过 FFT 求得电势 V
+      3) 在网格上计算电场：E = -∇V
+      4) 将网格电场通过 gather 插值回粒子位置，得到粒子受力
+         （由于 q=1，故 F = E）
+      5) 使用半隐式欧拉对粒子积分更新（速度/位置）
     """
 
     def __init__(
@@ -28,6 +30,12 @@ class ElectrostaticSim2D:
         *,
         eps_poisson: float = 1e-12,
     ):
+        """
+        参数：
+        - grid：计算网格
+        - particles：粒子状态（位置、速度、力）
+        - eps_poisson：Poisson 求解时的数值阈值（用于避免 k=0 除零）
+        """
         self.grid = grid
         self.particles = particles
         self.eps_poisson = eps_poisson
@@ -44,7 +52,8 @@ class ElectrostaticSim2D:
         )
         self.Ex, self.Ey = compute_e_from_potential_periodic(self.V, self.grid.dx, self.grid.dy)
 
-        # Gather forces to particles: F = E (q=1)
+        # 将网格电场（对应 E）gather 回粒子，得到粒子受力：
+        # 由于 q=1 且 m=1，故 F = E
         fx, fy = gather_field_to_particles_bilinear(self.grid, self.particles, self.Ex, self.Ey)
         self.particles.fx = fx
         self.particles.fy = fy
@@ -58,6 +67,6 @@ class ElectrostaticSim2D:
         for s in range(steps):
             self.step(dt)
             if (s % record_every) == 0:
-                # snapshot particle positions
+                # 记录（snapshots）粒子位置，用于后续可视化/调试
                 frames.append(np.stack([self.particles.x, self.particles.y], axis=1))
         return {"positions": np.array(frames, dtype=np.float64)}
