@@ -764,27 +764,13 @@ fn handle_mouse_interaction(
                 ui.ctx().request_repaint();
             }
 
-            // 鼠标拖拽平移（右键或中键）
-            if mouse_down && (ui.input(|i| i.pointer.button_down(egui::PointerButton::Middle))
-                           || ui.input(|i| i.pointer.button_down(egui::PointerButton::Secondary))) {
-                if !interaction.panning {
-                    interaction.panning = true;
-                    interaction.last_pan_pos = Some((pos.x, pos.y));
-                } else if let Some(last_pos) = interaction.last_pan_pos {
-                    let dx = pos.x - last_pos.0;
-                    let dy = pos.y - last_pos.1;
-                    interaction.view_offset.0 += dx;
-                    interaction.view_offset.1 += dy;
-                    interaction.last_pan_pos = Some((pos.x, pos.y));
-                    ui.ctx().request_repaint();
-                }
-            } else {
-                interaction.panning = false;
-                interaction.last_pan_pos = None;
-            }
-
-            // 左键点击也可以平移（拖拽模式）
-            if mouse_down && ui.input(|i| i.pointer.button_down(egui::PointerButton::Primary)) {
+            // 鼠标拖拽平移（左键/右键/中键均可）
+            let any_pan_button = mouse_down && (
+                ui.input(|i| i.pointer.button_down(egui::PointerButton::Primary))
+                || ui.input(|i| i.pointer.button_down(egui::PointerButton::Secondary))
+                || ui.input(|i| i.pointer.button_down(egui::PointerButton::Middle))
+            );
+            if any_pan_button {
                 if !interaction.panning {
                     interaction.panning = true;
                     interaction.last_pan_pos = Some((pos.x, pos.y));
