@@ -340,7 +340,7 @@ fn render_left_panel(ctx: &egui::Context, state: &mut SimulationState) {
 
                 for tool in ToolMode::all() {
                     let is_selected = interaction.tool_mode == tool;
-                    let text = tool.display_name();
+                    let text = format!("{} {}", tool.icon(), tool.display_name());
 
                     let button = if is_selected {
                         egui::Button::new(text)
@@ -558,10 +558,12 @@ fn render_central_canvas(ctx: &egui::Context, state: &mut SimulationState) {
             );
             texture_rect = response.rect;
         } else {
-            // 不显示热力图：在画布区域绘制纯色背景
+            // 不显示热力图：在画布区域绘制纯色背景 + 边框
             texture_rect = image_rect;
             let bg_color = ui.style().visuals.panel_fill;
-            ui.painter().rect_filled(image_rect, 0.0, bg_color);
+            let painter = ui.painter();
+            painter.rect_filled(image_rect, 0.0, bg_color);
+            painter.rect_stroke(image_rect, 0.0, (1.0, egui::Color32::GRAY), egui::StrokeKind::Inside);
         }
 
         // 绘制粒子

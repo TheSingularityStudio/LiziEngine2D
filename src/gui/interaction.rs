@@ -22,6 +22,14 @@ impl ToolMode {
             ToolMode::DeleteParticle => "删除",
         }
     }
+
+    pub fn icon(&self) -> &'static str {
+        match self {
+            ToolMode::DragParticle => "\u{1F5B1}",  // 🖱
+            ToolMode::PlaceParticle => "+",
+            ToolMode::DeleteParticle => "-",
+        }
+    }
 }
 
 /// 放置粒子的参数
