@@ -13,33 +13,16 @@ pub fn gather_field_to_particles_bilinear(
     ex: &Array2<f64>,
     ey: &Array2<f64>,
 ) -> (Array1<f64>, Array1<f64>) {
-    let (nx, ny) = grid.shape();
     let n = particles.len();
-    let lx = grid.lx();
-    let ly = grid.ly();
 
     let mut fx = Array1::zeros(n);
     let mut fy = Array1::zeros(n);
 
     for p in 0..n {
-        // 周期包裹
-        let xw = ((particles.x[p] % lx) + lx) % lx;
-        let yw = ((particles.y[p] % ly) + ly) % ly;
-        let gx = xw / grid.dx;
-        let gy = yw / grid.dy;
+        let (xw, yw) = grid.periodic_wrap(particles.x[p], particles.y[p]);
+        let (gx, gy) = (xw / grid.dx, yw / grid.dy);
 
-        let i0 = (gx.floor() as i64).rem_euclid(nx as i64) as usize;
-        let j0 = (gy.floor() as i64).rem_euclid(ny as i64) as usize;
-        let i1 = (i0 + 1) % nx;
-        let j1 = (j0 + 1) % ny;
-
-        let ftx = gx - gx.floor();
-        let fty = gy - gy.floor();
-
-        let wx0 = 1.0 - ftx;
-        let wx1 = ftx;
-        let wy0 = 1.0 - fty;
-        let wy1 = fty;
+        let (i0, i1, j0, j1, wx0, wx1, wy0, wy1) = grid.bilinear_weights(gx, gy);
 
         // 双线性插值
         fx[p] = ex[[i0, j0]] * wx0 * wy0

@@ -4,7 +4,7 @@ use eframe::egui;
 use egui::ColorImage;
 use egui::load::SizedTexture;
 
-use crate::core::interaction::InteractionState;
+use crate::gui::interaction::InteractionState;
 use crate::core::sim::ElectrostaticSim2D;
 use crate::presets::PresetVariant;
 use crate::visual::colors::heatmap_rgb;

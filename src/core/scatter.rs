@@ -9,28 +9,13 @@ use crate::core::particles::ParticleState;
 pub fn scatter_unit_charges_to_grid(grid: &Grid2D, particles: &ParticleState) -> Array2<f64> {
     let (nx, ny) = grid.shape();
     let mut rho = Array2::zeros((nx, ny));
-    let lx = grid.lx();
-    let ly = grid.ly();
 
     for p in 0..particles.len() {
         let weight = particles.q[p]; // 使用粒子电荷量作为权重
-        let xw = ((particles.x[p] % lx) + lx) % lx;
-        let yw = ((particles.y[p] % ly) + ly) % ly;
-        let gx = xw / grid.dx;
-        let gy = yw / grid.dy;
+        let (xw, yw) = grid.periodic_wrap(particles.x[p], particles.y[p]);
+        let (gx, gy) = (xw / grid.dx, yw / grid.dy);
 
-        let i0 = (gx.floor() as i64).rem_euclid(nx as i64) as usize;
-        let j0 = (gy.floor() as i64).rem_euclid(ny as i64) as usize;
-        let i1 = (i0 + 1) % nx;
-        let j1 = (j0 + 1) % ny;
-
-        let fx = gx - gx.floor();
-        let fy = gy - gy.floor();
-
-        let wx0 = 1.0 - fx;
-        let wx1 = fx;
-        let wy0 = 1.0 - fy;
-        let wy1 = fy;
+        let (i0, i1, j0, j1, wx0, wx1, wy0, wy1) = grid.bilinear_weights(gx, gy);
 
         rho[[i0, j0]] += weight * wx0 * wy0;
         rho[[i1, j0]] += weight * wx1 * wy0;
