@@ -1,79 +1,104 @@
+use std::fmt;
 use ndarray::{Array2, Axis};
 use ndrustfft::{ndfft, ndifft, FftHandler};
 use num_complex::Complex64;
 use num_traits::Zero;
 
-/// 使用 FFT 在周期域中求解离散 Poisson 方程
+/// 使用 FFT 的 Poisson 求解器（带缓存，避免每帧重新分配 FFT Handler）
 ///
-/// 方程: ∇²V = -rho
+/// 在周期域中求解离散 Poisson 方程: ∇²V = -rho
 /// 在傅里叶空间: V_hat(k) = rho_hat(k) / (kx² + ky²)
-///
-/// 参数:
-/// - rho: 电荷密度, shape (nx, ny)
-/// - dx, dy: 网格间距
-/// - eps: k=0 模式阈值，避免除零
-///
-/// 返回: 电势 V, shape (nx, ny)
-pub fn solve_poisson_via_discrete_greens_function_kernel(
-    rho: &Array2<f64>,
-    dx: f64,
-    dy: f64,
-    eps: f64,
-) -> Array2<f64> {
-    let (nx, ny) = rho.dim();
+pub struct PoissonSolver {
+    nx: usize,
+    ny: usize,
+    handler_0: FftHandler<f64>,
+    handler_1: FftHandler<f64>,
+    k2: Array2<f64>,
+}
 
-    // 转换为复数
-    let mut rho_hat: Array2<Complex64> = rho.mapv(|v| Complex64::new(v, 0.0));
+impl PoissonSolver {
+    /// 创建新的求解器，预先分配 FFT Handler 和 k² 矩阵
+    pub fn new(nx: usize, ny: usize, dx: f64, dy: f64, _eps: f64) -> Self {
+        let handler_0 = FftHandler::new(nx);
+        let handler_1 = FftHandler::new(ny);
 
-    // 2D FFT: 先沿 axis=0，再沿 axis=1
-    let mut handler_0 = FftHandler::new(nx);
-    let mut handler_1 = FftHandler::new(ny);
-    let mut tmp = Array2::zeros((nx, ny));
-
-    ndfft(&rho_hat, &mut tmp, &mut handler_0, 0);
-    ndfft(&tmp, &mut rho_hat, &mut handler_1, 1);
-
-    // 构造 k² 矩阵
-    let mut k2 = Array2::<f64>::zeros((nx, ny));
-
-    for i in 0..nx {
-        let freq_i = if i <= nx / 2 {
-            i as f64
-        } else {
-            i as f64 - nx as f64
-        };
-        let kx = 2.0 * std::f64::consts::PI * freq_i / (nx as f64 * dx);
-        for j in 0..ny {
-            let freq_j = if j <= ny / 2 {
-                j as f64
+        let mut k2 = Array2::<f64>::zeros((nx, ny));
+        for i in 0..nx {
+            let freq_i = if i <= nx / 2 {
+                i as f64
             } else {
-                j as f64 - ny as f64
+                i as f64 - nx as f64
             };
-            let ky = 2.0 * std::f64::consts::PI * freq_j / (ny as f64 * dy);
-            k2[[i, j]] = kx * kx + ky * ky;
-        }
-    }
-
-    // V_hat = rho_hat / k² (k≠0 时), k=0 时设为 0
-    for i in 0..nx {
-        for j in 0..ny {
-            if k2[[i, j]] > eps {
-                rho_hat[[i, j]] = rho_hat[[i, j]] / k2[[i, j]];
-            } else {
-                rho_hat[[i, j]] = Complex64::zero();
+            let kx = 2.0 * std::f64::consts::PI * freq_i / (nx as f64 * dx);
+            for j in 0..ny {
+                let freq_j = if j <= ny / 2 {
+                    j as f64
+                } else {
+                    j as f64 - ny as f64
+                };
+                let ky = 2.0 * std::f64::consts::PI * freq_j / (ny as f64 * dy);
+                k2[[i, j]] = kx * kx + ky * ky;
             }
         }
+
+        // 对 k=0 模式标记（设为大于 eps 将不会触发除零）
+        // 我们将其设为严格 0，以便后续判断
+        Self { nx, ny, handler_0, handler_1, k2 }
     }
 
-    // 逆 2D FFT: 先沿 axis=1，再沿 axis=0
-    let mut tmp2 = Array2::zeros((nx, ny));
-    let mut v_complex: Array2<Complex64> = Array2::zeros((nx, ny));
+    /// 求解 Poisson 方程
+    ///
+    /// 参数:
+    /// - rho: 电荷密度, shape (nx, ny)
+    /// - eps: k² ≈ 0 模式的阈值，避免除零
+    ///
+    /// 返回: 电势 V, shape (nx, ny)
+    pub fn solve(&self, rho: &Array2<f64>, eps: f64) -> Array2<f64> {
+        // 转换为复数
+        let mut rho_hat: Array2<Complex64> = rho.mapv(|v| Complex64::new(v, 0.0));
 
-    ndifft(&rho_hat, &mut tmp2, &mut handler_1, 1);
-    ndifft(&tmp2, &mut v_complex, &mut handler_0, 0);
+        // 2D FFT: 先沿 axis=0，再沿 axis=1
+        let mut tmp = Array2::zeros((self.nx, self.ny));
 
-    // 取实部
-    v_complex.mapv(|c| c.re)
+        ndfft(&rho_hat, &mut tmp, &self.handler_0, 0);
+        ndfft(&tmp, &mut rho_hat, &self.handler_1, 1);
+
+        // V_hat = rho_hat / k² (k≠0 时), k≈0 时设为 0
+        for i in 0..self.nx {
+            for j in 0..self.ny {
+                if self.k2[[i, j]] > eps {
+                    rho_hat[[i, j]] = rho_hat[[i, j]] / self.k2[[i, j]];
+                } else {
+                    rho_hat[[i, j]] = Complex64::zero();
+                }
+            }
+        }
+
+        // 逆 2D FFT: 先沿 axis=1，再沿 axis=0
+        let mut tmp2 = Array2::zeros((self.nx, self.ny));
+        let mut v_complex: Array2<Complex64> = Array2::zeros((self.nx, self.ny));
+
+        ndifft(&rho_hat, &mut tmp2, &self.handler_1, 1);
+        ndifft(&tmp2, &mut v_complex, &self.handler_0, 0);
+
+        // 取实部
+        v_complex.mapv(|c| c.re)
+    }
+
+    /// 获取网格尺寸
+    pub fn shape(&self) -> (usize, usize) {
+        (self.nx, self.ny)
+    }
+}
+
+impl fmt::Debug for PoissonSolver {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("PoissonSolver")
+            .field("nx", &self.nx)
+            .field("ny", &self.ny)
+            .field("k2", &self.k2)
+            .finish()
+    }
 }
 
 /// 在周期边界下使用中心差分计算电场
@@ -168,8 +193,9 @@ mod tests {
     #[test]
     fn test_poisson_solver_uniform_rho_zero_laplacian() {
         // Uniform charge density should produce zero potential (k=0 mode)
+        let solver = PoissonSolver::new(8, 8, 1.0, 1.0, 1e-12);
         let rho = Array2::from_elem((8, 8), 1.0);
-        let v = solve_poisson_via_discrete_greens_function_kernel(&rho, 1.0, 1.0, 1e-12);
+        let v = solver.solve(&rho, 1e-12);
         // Potential should be all zeros (k=0 mode removed)
         for val in v.iter() {
             assert!(val.abs() < 1e-10, "Uniform rho should give V=0, got {}", val);
@@ -183,10 +209,11 @@ mod tests {
         let ny = 16;
         let dx = 1.0;
         let dy = 1.0;
+        let solver = PoissonSolver::new(nx, ny, dx, dy, 1e-12);
         let mut rho = Array2::zeros((nx, ny));
         rho[[8, 8]] = 1.0 / (dx * dy); // charge density per unit area
         
-        let v = solve_poisson_via_discrete_greens_function_kernel(&rho, dx, dy, 1e-12);
+        let v = solver.solve(&rho, 1e-12);
         
         // Potential should be symmetric and positive at the charge location
         assert!(v[[8, 8]] > 0.0, "V at charge should be positive");
@@ -200,11 +227,12 @@ mod tests {
         let ny = 16;
         let dx = 1.0;
         let dy = 1.0;
+        let solver = PoissonSolver::new(nx, ny, dx, dy, 1e-12);
         let mut rho = Array2::zeros((nx, ny));
         rho[[6, 8]] = 1.0 / (dx * dy);   // positive charge
         rho[[10, 8]] = -1.0 / (dx * dy); // negative charge
 
-        let v = solve_poisson_via_discrete_greens_function_kernel(&rho, dx, dy, 1e-12);
+        let v = solver.solve(&rho, 1e-12);
         let (ex, ey) = compute_e_from_potential_periodic(&v, dx, dy);
 
         // Field should point from positive to negative charge, roughly along +x axis

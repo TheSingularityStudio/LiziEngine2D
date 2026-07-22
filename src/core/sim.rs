@@ -3,7 +3,7 @@ use ndarray::Array3;
 use crate::core::grid::Grid2D;
 use crate::core::particles::ParticleState;
 use crate::core::scatter::scatter_unit_charges_to_grid;
-use crate::core::poisson_fft::{solve_poisson_via_discrete_greens_function_kernel, compute_e_from_potential_periodic};
+use crate::core::poisson_solver::{PoissonSolver, compute_e_from_potential_periodic};
 use crate::core::interp::gather_field_to_particles_bilinear;
 use crate::core::integrator::step_half_implicit_euler;
 use crate::core::boundary::{BoundaryType, apply_boundary_conditions, apply_speed_limit};
@@ -29,12 +29,15 @@ pub struct ElectrostaticSim2D {
     pub boundary_type: BoundaryType,
     /// 最高速度限制（None 表示无限制）
     pub max_speed: Option<f64>,
+    /// 缓存的 Poisson 求解器（带 FFT Handler 预分配）
+    poisson_solver: Option<PoissonSolver>,
 }
 
 impl ElectrostaticSim2D {
     /// 创建新的模拟器实例（使用默认配置：周期边界，最高速度10.0）
     pub fn new(grid: Grid2D, particles: ParticleState, eps_poisson: f64) -> Self {
         Self {
+            poisson_solver: None, // 首次使用时惰性初始化
             grid,
             particles,
             eps_poisson,
@@ -56,6 +59,7 @@ impl ElectrostaticSim2D {
         max_speed: Option<f64>,
     ) -> Self {
         Self {
+            poisson_solver: None,
             grid,
             particles,
             eps_poisson,
@@ -68,15 +72,25 @@ impl ElectrostaticSim2D {
         }
     }
 
+    /// 获取或初始化 Poisson 求解器（使用缓存的 FFT Handler）
+    fn get_or_init_solver(&mut self) -> &PoissonSolver {
+        self.poisson_solver.get_or_insert_with(|| {
+            PoissonSolver::new(
+                self.grid.nx,
+                self.grid.ny,
+                self.grid.dx,
+                self.grid.dy,
+                self.eps_poisson,
+            )
+        })
+    }
+
     /// 计算当前粒子状态下的全场：rho → V → Ex, Ey，并将电场 gather 到粒子
     pub fn compute_fields(&mut self) {
         let rho = scatter_unit_charges_to_grid(&self.grid, &self.particles);
-        let v = solve_poisson_via_discrete_greens_function_kernel(
-            &rho,
-            self.grid.dx,
-            self.grid.dy,
-            self.eps_poisson,
-        );
+        let eps = self.eps_poisson;
+        let solver = self.get_or_init_solver();
+        let v = solver.solve(&rho, eps);
         let (ex, ey) = compute_e_from_potential_periodic(&v, self.grid.dx, self.grid.dy);
 
         // gather 电场到粒子受力
@@ -156,9 +170,9 @@ impl ElectrostaticSim2D {
             vx: self.particles.vx.clone(),
             vy: self.particles.vy.clone(),
             q: self.particles.q.clone(),
-            v: self.v.as_ref().unwrap().clone(),
-            ex: self.ex.as_ref().unwrap().clone(),
-            ey: self.ey.as_ref().unwrap().clone(),
+            v: self.v.as_ref().expect("v should be set after compute_fields").clone(),
+            ex: self.ex.as_ref().expect("ex should be set after compute_fields").clone(),
+            ey: self.ey.as_ref().expect("ey should be set after compute_fields").clone(),
             lx: self.grid.lx(),
             ly: self.grid.ly(),
         }
