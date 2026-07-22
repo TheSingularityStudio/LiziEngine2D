@@ -1,11 +1,11 @@
 use ndarray::Array2;
 use ndarray::Array3;
-use crate::grid::Grid2D;
-use crate::particles::ParticleState;
-use crate::scatter::scatter_unit_charges_to_grid;
-use crate::poisson_fft::{solve_poisson_via_discrete_greens_function_kernel, compute_e_from_potential_periodic};
-use crate::interp::gather_field_to_particles_bilinear;
-use crate::integrator::step_half_implicit_euler;
+use crate::core::grid::Grid2D;
+use crate::core::particles::ParticleState;
+use crate::core::scatter::scatter_unit_charges_to_grid;
+use crate::core::poisson_fft::{solve_poisson_via_discrete_greens_function_kernel, compute_e_from_potential_periodic};
+use crate::core::interp::gather_field_to_particles_bilinear;
+use crate::core::integrator::step_half_implicit_euler;
 
 /// 2D 静电（电场-粒子）CPU 模拟器（PIC 风格实现；单位电荷、单位质量）
 ///

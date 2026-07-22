@@ -1,5 +1,5 @@
-use crate::grid::Grid2D;
-use crate::particles::ParticleState;
+use crate::core::grid::Grid2D;
+use crate::core::particles::ParticleState;
 
 /// 半隐式欧拉时间积分：
 ///

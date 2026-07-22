@@ -1,7 +1,7 @@
 use ndarray::Array2;
 
-use crate::grid::Grid2D;
-use crate::particles::ParticleState;
+use crate::core::grid::Grid2D;
+use crate::core::particles::ParticleState;
 
 /// 将单位电荷粒子双线性散射到网格节点上，生成离散电荷密度 rho
 ///

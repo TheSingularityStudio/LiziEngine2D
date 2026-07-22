@@ -1,7 +1,10 @@
-pub mod grid;
-pub mod particles;
-pub mod scatter;
-pub mod poisson_fft;
-pub mod interp;
-pub mod integrator;
-pub mod sim;
+pub mod core;
+
+// 重新导出 core 模块，保持外部 API 兼容
+pub use core::grid;
+pub use core::integrator;
+pub use core::interp;
+pub use core::particles;
+pub use core::poisson_fft;
+pub use core::scatter;
+pub use core::sim;

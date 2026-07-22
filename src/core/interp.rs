@@ -1,8 +1,8 @@
 use ndarray::Array1;
 use ndarray::Array2;
 
-use crate::grid::Grid2D;
-use crate::particles::ParticleState;
+use crate::core::grid::Grid2D;
+use crate::core::particles::ParticleState;
 
 /// 将定义在网格节点上的电场矢量场 (Ex, Ey) 通过双线性插值采样到粒子位置
 ///
