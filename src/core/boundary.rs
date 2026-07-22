@@ -7,6 +7,25 @@ pub enum BoundaryType {
     #[default]
     Periodic,      // 周期边界
     Reflective,    // 反弹边界（完全弹性）
+    Open,          // 虚空边界（移出即删除）
+}
+
+impl BoundaryType {
+    pub fn all() -> [BoundaryType; 3] {
+        [
+            BoundaryType::Periodic,
+            BoundaryType::Reflective,
+            BoundaryType::Open,
+        ]
+    }
+
+    pub fn display_name(&self) -> &'static str {
+        match self {
+            BoundaryType::Periodic => "周期边界",
+            BoundaryType::Reflective => "反弹边界",
+            BoundaryType::Open => "虚空边界",
+        }
+    }
 }
 
 /// 应用边界条件到粒子
@@ -54,6 +73,22 @@ pub fn apply_boundary_conditions(
                 // 确保粒子在边界内（处理数值误差）
                 particles.x[p] = particles.x[p].clamp(0.0, lx);
                 particles.y[p] = particles.y[p].clamp(0.0, ly);
+            }
+        }
+        BoundaryType::Open => {
+            // 虚空边界：删除超出 [0, lx) × [0, ly) 的粒子
+            let len = particles.len();
+            let mut to_remove: Vec<usize> = Vec::new();
+            for p in 0..len {
+                if particles.x[p] < 0.0 || particles.x[p] >= lx
+                    || particles.y[p] < 0.0 || particles.y[p] >= ly
+                {
+                    to_remove.push(p);
+                }
+            }
+            // 从后往前删除，避免索引偏移
+            for &idx in to_remove.iter().rev() {
+                particles.remove_particle(idx);
             }
         }
     }

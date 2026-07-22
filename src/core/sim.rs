@@ -29,6 +29,16 @@ pub struct ElectrostaticSim2D {
     pub boundary_type: BoundaryType,
     /// 最高速度限制（None 表示无限制）
     pub max_speed: Option<f64>,
+    /// 重力开关
+    pub gravity_enabled: bool,
+    /// X 方向重力加速度
+    pub gravity_x: f64,
+    /// Y 方向重力加速度
+    pub gravity_y: f64,
+    /// 摩擦力开关
+    pub friction_enabled: bool,
+    /// 摩擦阻尼系数
+    pub friction_damping: f64,
     /// 缓存的 Poisson 求解器（带 FFT Handler 预分配）
     poisson_solver: Option<PoissonSolver>,
 }
@@ -47,6 +57,11 @@ impl ElectrostaticSim2D {
             ey: None,
             boundary_type: BoundaryType::Periodic,
             max_speed: Some(10.0),
+            gravity_enabled: false,
+            gravity_x: 0.0,
+            gravity_y: -9.8,
+            friction_enabled: false,
+            friction_damping: 0.1,
         }
     }
 
@@ -69,6 +84,11 @@ impl ElectrostaticSim2D {
             ey: None,
             boundary_type,
             max_speed,
+            gravity_enabled: false,
+            gravity_x: 0.0,
+            gravity_y: -9.8,
+            friction_enabled: false,
+            friction_damping: 0.1,
         }
     }
 
@@ -113,6 +133,24 @@ impl ElectrostaticSim2D {
     /// 执行一个时间步：计算场 + 积分 + 边界处理 + 速度限制
     pub fn step(&mut self, dt: f64) {
         self.compute_fields();
+        
+        // 应用重力（在积分前将重力加速度叠加到受力上）
+        if self.gravity_enabled {
+            for i in 0..self.particles.len() {
+                // F = m * g，这里 m=1（单位质量）
+                self.particles.fx[i] += self.gravity_x;
+                self.particles.fy[i] += self.gravity_y;
+            }
+        }
+
+        // 应用摩擦力（在积分前将阻尼力叠加到受力上：F = -damping * v）
+        if self.friction_enabled && self.friction_damping > 0.0 {
+            for i in 0..self.particles.len() {
+                self.particles.fx[i] -= self.friction_damping * self.particles.vx[i];
+                self.particles.fy[i] -= self.friction_damping * self.particles.vy[i];
+            }
+        }
+        
         step_half_implicit_euler(&self.grid, &mut self.particles, dt);
         
         // 应用边界条件
