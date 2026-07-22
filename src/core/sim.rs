@@ -104,6 +104,8 @@ impl ElectrostaticSim2D {
         StateSnapshot {
             x: self.particles.x.clone(),
             y: self.particles.y.clone(),
+            vx: self.particles.vx.clone(),
+            vy: self.particles.vy.clone(),
             v: self.v.as_ref().unwrap().clone(),
             ex: self.ex.as_ref().unwrap().clone(),
             ey: self.ey.as_ref().unwrap().clone(),
@@ -116,6 +118,8 @@ impl ElectrostaticSim2D {
 pub struct StateSnapshot {
     pub x: ndarray::Array1<f64>,
     pub y: ndarray::Array1<f64>,
+    pub vx: ndarray::Array1<f64>,
+    pub vy: ndarray::Array1<f64>,
     pub v: Array2<f64>,
     pub ex: Array2<f64>,
     pub ey: Array2<f64>,

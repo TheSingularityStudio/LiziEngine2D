@@ -33,11 +33,14 @@ pub fn run(nx: usize, ny: usize, dx: f64, dy: f64, charge_x: Option<f64>, charge
 
     println!("Single Charge Demo started. Press ESC to close.");
 
-    // 窗口事件循环
-    while renderer.update(&snapshot) {
-        // 对于静态场景，短暂休眠
+    let mut frame_count = 0usize;
+    loop {
+        if !renderer.update(&snapshot) {
+            println!("Demo window closed at frame {}.", frame_count);
+            return;
+        }
+
+        frame_count += 1;
         std::thread::sleep(std::time::Duration::from_millis(16));
     }
-
-    println!("Demo window closed.");
 }

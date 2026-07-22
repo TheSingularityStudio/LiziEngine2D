@@ -5,3 +5,4 @@ pub mod poisson_fft;
 pub mod interp;
 pub mod integrator;
 pub mod sim;
+pub mod interaction;

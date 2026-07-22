@@ -52,10 +52,14 @@ pub fn run(nx: usize, ny: usize, dx: f64, dy: f64, eps: f64, opposite_sign: bool
 
     let combined_x_data: Vec<f64> = snap1.x.iter().chain(snap2.x.iter()).copied().collect();
     let combined_y_data: Vec<f64> = snap1.y.iter().chain(snap2.y.iter()).copied().collect();
+    let combined_vx_data: Vec<f64> = snap1.vx.iter().chain(snap2.vx.iter()).copied().collect();
+    let combined_vy_data: Vec<f64> = snap1.vy.iter().chain(snap2.vy.iter()).copied().collect();
 
     let combined_snapshot = crate::core::sim::StateSnapshot {
         x: ndarray::Array1::from_vec(combined_x_data),
         y: ndarray::Array1::from_vec(combined_y_data),
+        vx: ndarray::Array1::from_vec(combined_vx_data),
+        vy: ndarray::Array1::from_vec(combined_vy_data),
         v: combined_v,
         ex: combined_ex,
         ey: combined_ey,
@@ -71,9 +75,14 @@ pub fn run(nx: usize, ny: usize, dx: f64, dy: f64, eps: f64, opposite_sign: bool
 
     println!("Two Charges Demo started. Press ESC to close.");
 
-    while renderer.update(&combined_snapshot) {
+    let mut frame_count = 0usize;
+    loop {
+        if !renderer.update(&combined_snapshot) {
+            println!("Demo window closed at frame {}.", frame_count);
+            return;
+        }
+
+        frame_count += 1;
         std::thread::sleep(std::time::Duration::from_millis(16));
     }
-
-    println!("Demo window closed.");
 }
