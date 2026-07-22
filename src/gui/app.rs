@@ -8,6 +8,7 @@ use egui::menu;
 use crate::gui::interaction::{InteractionState, ToolMode};
 use crate::core::sim::ElectrostaticSim2D;
 use crate::core::boundary::BoundaryType;
+use crate::core::lz2d;
 use crate::presets::PresetVariant;
 use crate::visual::colors::heatmap_rgb;
 
@@ -63,6 +64,8 @@ struct SimulationState {
     /// 弹窗状态
     show_about_dialog: bool,
     show_shortcuts_dialog: bool,
+    /// 消息提示弹窗（导入/导出结果）
+    message_dialog: Option<String>,
 }
 
 /// LiziEngine2D 主 GUI 应用
@@ -136,8 +139,9 @@ impl LiziApp {
                                     show_left_panel: true,
                                     show_right_panel: true,
                                     show_heatmap: true,
-                                    show_about_dialog: false,
-                                    show_shortcuts_dialog: false,
+                                show_about_dialog: false,
+                                show_shortcuts_dialog: false,
+                                message_dialog: None,
                                 });
                             }
                             ui.add_space(10.0);
@@ -159,6 +163,52 @@ fn render_menu_bar(ctx: &egui::Context, state: &mut SimulationState) -> bool {
         menu::bar(ui, |ui| {
             // ---- 文件菜单 ----
             ui.menu_button("文件", |ui| {
+                if ui.button("📂 导入场景...").clicked() {
+                    ui.close_menu();
+                    if let Some(path) = rfd::FileDialog::new()
+                        .add_filter("LiziEngine2D 场景", &["lz2d"])
+                        .pick_file()
+                    {
+                        match lz2d::load_from_file(path.to_string_lossy().as_ref()) {
+                            Ok((loaded_sim, loaded_step_count)) => {
+                                // 更新当前模拟器状态
+                                state.sim = loaded_sim;
+                                state.step_count = loaded_step_count;
+                                state.paused = true;
+                                state.v_min = 0.0;
+                                state.v_max = 1.0;
+                                state.heatmap_texture = None;
+                                state.interaction = InteractionState::new();
+                                // 标记场为过期（首次渲染时会自动 recalc）
+                                state.sim.v = None;
+                                state.sim.ex = None;
+                                state.sim.ey = None;
+                                state.message_dialog = Some(format!("✅ 成功导入场景\n路径: {}", path.display()));
+                            }
+                            Err(e) => {
+                                state.message_dialog = Some(format!("❌ 导入失败\n{}", e));
+                            }
+                        }
+                    }
+                }
+                if ui.button("💾 导出场景...").clicked() {
+                    ui.close_menu();
+                    if let Some(path) = rfd::FileDialog::new()
+                        .add_filter("LiziEngine2D 场景", &["lz2d"])
+                        .set_file_name("scene.lz2d")
+                        .save_file()
+                    {
+                        match lz2d::save_to_file(&state.sim, state.step_count, path.to_string_lossy().as_ref()) {
+                            Ok(()) => {
+                                state.message_dialog = Some(format!("✅ 成功导出场景\n路径: {}", path.display()));
+                            }
+                            Err(e) => {
+                                state.message_dialog = Some(format!("❌ 导出失败\n{}", e));
+                            }
+                        }
+                    }
+                }
+                ui.separator();
                 if ui.button("返回预设选择").clicked() {
                     back_requested = true;
                     ui.close_menu();
@@ -248,6 +298,26 @@ fn render_menu_bar(ctx: &egui::Context, state: &mut SimulationState) -> bool {
 
 /// 渲染对话框
 fn render_dialogs(ctx: &egui::Context, state: &mut SimulationState) {
+    // 消息弹窗（导入/导出结果）
+    if let Some(msg) = &state.message_dialog.clone() {
+        let mut open = true;
+        egui::Window::new("消息")
+            .open(&mut open)
+            .resizable(false)
+            .default_size([400.0, 150.0])
+            .show(ctx, |ui| {
+                ui.add_space(8.0);
+                ui.label(msg);
+                ui.add_space(12.0);
+                if ui.button("确定").clicked() {
+                    state.message_dialog = None;
+                }
+            });
+        if !open {
+            state.message_dialog = None;
+        }
+    }
+
     // 关于对话框
     if state.show_about_dialog {
         egui::Window::new("关于 LiziEngine2D")
