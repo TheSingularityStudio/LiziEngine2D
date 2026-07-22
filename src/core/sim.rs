@@ -134,12 +134,12 @@ impl ElectrostaticSim2D {
     pub fn step(&mut self, dt: f64) {
         self.compute_fields();
         
-        // 应用重力（在积分前将重力加速度叠加到受力上）
+        // 应用重力（在积分前将重力叠加到受力上）
         if self.gravity_enabled {
             for i in 0..self.particles.len() {
-                // F = m * g，这里 m=1（单位质量）
-                self.particles.fx[i] += self.gravity_x;
-                self.particles.fy[i] += self.gravity_y;
+                // F = m * g
+                self.particles.fx[i] += self.particles.m[i] * self.gravity_x;
+                self.particles.fy[i] += self.particles.m[i] * self.gravity_y;
             }
         }
 

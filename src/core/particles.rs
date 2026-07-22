@@ -6,17 +6,18 @@ use rand::SeedableRng;
 /// 粒子状态数据结构
 #[derive(Debug, Clone)]
 pub struct ParticleState {
-    pub x: Array1<f64>,   // shape (N,)
-    pub y: Array1<f64>,   // shape (N,)
-    pub vx: Array1<f64>,  // shape (N,)
-    pub vy: Array1<f64>,  // shape (N,)
-    pub fx: Array1<f64>,  // shape (N,)
-    pub fy: Array1<f64>,  // shape (N,)
+    pub x: Array1<f64>,   // shape (N,) — 位置 x
+    pub y: Array1<f64>,   // shape (N,) — 位置 y
+    pub vx: Array1<f64>,  // shape (N,) — 速度 vx
+    pub vy: Array1<f64>,  // shape (N,) — 速度 vy
+    pub fx: Array1<f64>,  // shape (N,) — 受力 fx
+    pub fy: Array1<f64>,  // shape (N,) — 受力 fy
     pub q: Array1<f64>,   // shape (N,) — 电荷量，默认 1.0
+    pub m: Array1<f64>,   // shape (N,) — 质量，默认 1.0
 }
 
 impl ParticleState {
-    /// 创建 n 个粒子：位置在 [0,1) 内随机初始化，速度/力为 0，电荷为 1.0
+    /// 创建 n 个粒子：位置在 [0,1) 内随机初始化，速度/力为 0，电荷为 1.0，质量为 1.0
     pub fn zeros(n: usize, seed: Option<u64>) -> Self {
         let seed = seed.unwrap_or(0);
         let mut rng = StdRng::seed_from_u64(seed);
@@ -30,6 +31,7 @@ impl ParticleState {
             fx: Array1::zeros(n),
             fy: Array1::zeros(n),
             q: Array1::ones(n),
+            m: Array1::ones(n),
         }
     }
 
@@ -43,6 +45,20 @@ impl ParticleState {
         s
     }
 
+    /// 创建 n 个粒子，指定电荷量和质量
+    pub fn with_charges_and_masses(n: usize, seed: Option<u64>, charges: &[f64], masses: &[f64]) -> Self {
+        let mut s = Self::zeros(n, seed);
+        let len = charges.len().min(n);
+        for i in 0..len {
+            s.q[i] = charges[i];
+        }
+        let mlen = masses.len().min(n);
+        for i in 0..mlen {
+            s.m[i] = masses[i];
+        }
+        s
+    }
+
     pub fn len(&self) -> usize {
         self.x.len()
     }
@@ -51,8 +67,8 @@ impl ParticleState {
         self.x.is_empty()
     }
 
-    /// 添加一个粒子
-    pub fn add_particle(&mut self, x: f64, y: f64, q: f64, vx: f64, vy: f64) {
+    /// 添加一个粒子（带质量参数）
+    pub fn add_particle(&mut self, x: f64, y: f64, q: f64, mass: f64, vx: f64, vy: f64) {
         let mut new_x: Vec<f64> = self.x.iter().copied().collect();
         let mut new_y: Vec<f64> = self.y.iter().copied().collect();
         let mut new_vx: Vec<f64> = self.vx.iter().copied().collect();
@@ -60,6 +76,7 @@ impl ParticleState {
         let mut new_fx: Vec<f64> = self.fx.iter().copied().collect();
         let mut new_fy: Vec<f64> = self.fy.iter().copied().collect();
         let mut new_q: Vec<f64> = self.q.iter().copied().collect();
+        let mut new_m: Vec<f64> = self.m.iter().copied().collect();
         new_x.push(x);
         new_y.push(y);
         new_vx.push(vx);
@@ -67,6 +84,7 @@ impl ParticleState {
         new_fx.push(0.0);
         new_fy.push(0.0);
         new_q.push(q);
+        new_m.push(mass);
         self.x = ndarray::Array1::from_vec(new_x);
         self.y = ndarray::Array1::from_vec(new_y);
         self.vx = ndarray::Array1::from_vec(new_vx);
@@ -74,6 +92,7 @@ impl ParticleState {
         self.fx = ndarray::Array1::from_vec(new_fx);
         self.fy = ndarray::Array1::from_vec(new_fy);
         self.q = ndarray::Array1::from_vec(new_q);
+        self.m = ndarray::Array1::from_vec(new_m);
     }
 
     /// 删除指定索引的粒子
@@ -95,6 +114,7 @@ impl ParticleState {
         self.fx = remove_at(index, &self.fx);
         self.fy = remove_at(index, &self.fy);
         self.q = remove_at(index, &self.q);
+        self.m = remove_at(index, &self.m);
     }
 
     /// 深拷贝
@@ -107,6 +127,7 @@ impl ParticleState {
             fx: self.fx.clone(),
             fy: self.fy.clone(),
             q: self.q.clone(),
+            m: self.m.clone(),
         }
     }
 }
@@ -127,6 +148,7 @@ mod tests {
         assert_eq!(particles.fx.len(), n);
         assert_eq!(particles.fy.len(), n);
         assert_eq!(particles.q.len(), n);
+        assert_eq!(particles.m.len(), n);
     }
 
     #[test]
@@ -145,6 +167,14 @@ mod tests {
         let particles = ParticleState::zeros(5, Some(0));
         for i in 0..5 {
             assert!((particles.q[i] - 1.0).abs() < 1e-15);
+        }
+    }
+
+    #[test]
+    fn test_zeros_initializes_mass_to_one() {
+        let particles = ParticleState::zeros(5, Some(0));
+        for i in 0..5 {
+            assert!((particles.m[i] - 1.0).abs() < 1e-15);
         }
     }
 
@@ -171,13 +201,16 @@ mod tests {
         let mut p1 = ParticleState::zeros(3, Some(42));
         p1.x[0] = 99.0;
         p1.q[1] = -5.0;
+        p1.m[2] = 2.5;
         let p2 = p1.copy();
         // Modify original
         p1.x[0] = 0.0;
         p1.q[1] = 0.0;
+        p1.m[2] = 1.0;
         // Copy should be unchanged
         assert!((p2.x[0] - 99.0).abs() < 1e-15);
         assert!((p2.q[1] + 5.0).abs() < 1e-15);
+        assert!((p2.m[2] - 2.5).abs() < 1e-15);
     }
 
     #[test]
@@ -205,5 +238,28 @@ mod tests {
         // At least one position should differ
         let all_same = p1.x.iter().zip(p2.x.iter()).all(|(a, b)| (a - b).abs() < 1e-15);
         assert!(!all_same);
+    }
+
+    #[test]
+    fn test_add_particle_with_mass() {
+        let mut p = ParticleState::zeros(2, Some(0));
+        p.add_particle(0.5, 0.5, -1.0, 2.5, 0.1, 0.2);
+        assert_eq!(p.len(), 3);
+        assert!((p.q[2] + 1.0).abs() < 1e-15);
+        assert!((p.m[2] - 2.5).abs() < 1e-15);
+        assert!((p.vx[2] - 0.1).abs() < 1e-15);
+        assert!((p.vy[2] - 0.2).abs() < 1e-15);
+    }
+
+    #[test]
+    fn test_remove_particle_with_mass() {
+        let mut p = ParticleState::zeros(3, Some(0));
+        p.m[0] = 0.5;
+        p.m[1] = 1.0;
+        p.m[2] = 2.0;
+        p.remove_particle(1);
+        assert_eq!(p.len(), 2);
+        assert!((p.m[0] - 0.5).abs() < 1e-15);
+        assert!((p.m[1] - 2.0).abs() < 1e-15);
     }
 }

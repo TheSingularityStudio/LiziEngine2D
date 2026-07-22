@@ -8,8 +8,8 @@ use crate::core::boundary::BoundaryType;
 /// LZ2D 文件魔数（前 4 字节）
 const MAGIC_HEADER: &[u8; 4] = b"LZ2D";
 
-/// 当前文件格式版本
-const LZ2D_VERSION: u32 = 3;
+/// 当前文件格式版本（v4 新增质量参数）
+const LZ2D_VERSION: u32 = 4;
 
 /// 内部序列化结构（不直接暴露）
 #[derive(Serialize, Deserialize)]
@@ -28,6 +28,8 @@ struct Lz2dFile {
     particles_vx: Vec<f64>,
     particles_vy: Vec<f64>,
     particles_q: Vec<f64>,
+    /// 粒子质量（v4 新增）
+    particles_m: Vec<f64>,
     /// 重力参数（v2 新增）
     gravity_enabled: bool,
     gravity_x: f64,
@@ -60,6 +62,7 @@ impl Lz2dFile {
             particles_vx: sim.particles.vx.to_vec(),
             particles_vy: sim.particles.vy.to_vec(),
             particles_q: sim.particles.q.to_vec(),
+            particles_m: sim.particles.m.to_vec(),
             gravity_enabled: sim.gravity_enabled,
             gravity_x: sim.gravity_x,
             gravity_y: sim.gravity_y,
@@ -78,6 +81,13 @@ impl Lz2dFile {
 
         let n = self.particles_x.len();
 
+        // 处理质量：旧版本文件可能没有 particles_m，使用默认值 1.0
+        let masses = if self.particles_m.len() == n {
+            self.particles_m
+        } else {
+            vec![1.0; n]
+        };
+
         let particles = ParticleState {
             x: ndarray::Array1::from_vec(self.particles_x),
             y: ndarray::Array1::from_vec(self.particles_y),
@@ -86,6 +96,7 @@ impl Lz2dFile {
             fx: ndarray::Array1::zeros(n),
             fy: ndarray::Array1::zeros(n),
             q: ndarray::Array1::from_vec(self.particles_q),
+            m: ndarray::Array1::from_vec(masses),
         };
 
         let grid = Grid2D::new(self.grid_nx, self.grid_ny, self.grid_dx, self.grid_dy);
@@ -199,6 +210,11 @@ mod tests {
             assert!((loaded.particles.y[i] - sim.particles.y[i]).abs() < 1e-15);
         }
 
+        // 验证质量还原
+        for i in 0..5 {
+            assert!((loaded.particles.m[i] - 1.0).abs() < 1e-15);
+        }
+
         std::fs::remove_file(&temp_path).ok();
     }
 
@@ -212,6 +228,26 @@ mod tests {
         let result = load_from_file(&temp_path.to_string_lossy());
         assert!(result.is_err());
         assert!(result.unwrap_err().contains("魔数"));
+
+        std::fs::remove_file(&temp_path).ok();
+    }
+
+    #[test]
+    fn test_save_load_with_custom_mass() {
+        let mut sim = create_test_sim();
+        // 设置自定义质量
+        for i in 0..sim.particles.len() {
+            sim.particles.m[i] = (i as f64 + 1.0) * 0.5;
+        }
+        let temp_path = std::env::temp_dir().join("test_mass.lz2d");
+        let path_str = temp_path.to_string_lossy().to_string();
+
+        save_to_file(&sim, 0, &path_str).unwrap();
+        let (loaded, _) = load_from_file(&path_str).unwrap();
+
+        for i in 0..sim.particles.len() {
+            assert!((loaded.particles.m[i] - sim.particles.m[i]).abs() < 1e-15);
+        }
 
         std::fs::remove_file(&temp_path).ok();
     }
