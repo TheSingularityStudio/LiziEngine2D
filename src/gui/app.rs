@@ -57,6 +57,8 @@ struct SimulationState {
     /// 面板可见性
     show_left_panel: bool,
     show_right_panel: bool,
+    /// 显示热力图
+    show_heatmap: bool,
     /// 弹窗状态
     show_about_dialog: bool,
     show_shortcuts_dialog: bool,
@@ -132,6 +134,7 @@ impl LiziApp {
                                     heatmap_texture: None,
                                     show_left_panel: true,
                                     show_right_panel: true,
+                                    show_heatmap: true,
                                     show_about_dialog: false,
                                     show_shortcuts_dialog: false,
                                 });
@@ -174,6 +177,11 @@ fn render_menu_bar(ctx: &egui::Context, state: &mut SimulationState) -> bool {
                 let mut show_right = state.show_right_panel;
                 if ui.checkbox(&mut show_right, "显示参数面板").changed() {
                     state.show_right_panel = show_right;
+                }
+                ui.separator();
+                let mut show_heatmap = state.show_heatmap;
+                if ui.checkbox(&mut show_heatmap, "显示热力图").changed() {
+                    state.show_heatmap = show_heatmap;
                 }
             });
 
@@ -238,22 +246,35 @@ fn render_menu_bar(ctx: &egui::Context, state: &mut SimulationState) -> bool {
 }
 
 /// 渲染对话框
-fn render_dialogs(state: &mut SimulationState) {
+fn render_dialogs(ctx: &egui::Context, state: &mut SimulationState) {
     // 关于对话框
     if state.show_about_dialog {
         egui::Window::new("关于 LiziEngine2D")
             .open(&mut state.show_about_dialog)
             .resizable(false)
-            .default_size([400.0, 200.0])
-            .show(&egui::Context::default(), |ui| {
-                ui.heading("LiziEngine2D");
-                ui.label("版本 0.1.0");
-                ui.separator();
-                ui.add_space(8.0);
-                ui.label("二维静电 PIC (Particle-in-Cell) 模拟器");
-                ui.label("使用 Rust + egui 实现");
-                ui.add_space(8.0);
-                ui.label("GitHub: https://github.com/TheSingularityStudio/LiziEngine2D");
+            .default_size([420.0, 280.0])
+            .show(ctx, |ui| {
+                egui::ScrollArea::vertical().show(ui, |ui| {
+                    ui.heading("LiziEngine2D");
+                    ui.label("版本 0.1.0");
+                    ui.separator();
+                    ui.add_space(8.0);
+                    ui.label("二维静电 PIC (Particle-in-Cell) 模拟器");
+                    ui.label("使用 Rust + egui 实现");
+                    ui.add_space(8.0);
+                    ui.hyperlink_to("GitHub 仓库", "https://github.com/TheSingularityStudio/LiziEngine2D");
+                    ui.add_space(8.0);
+                    ui.separator();
+                    ui.add_space(8.0);
+                    ui.label("技术栈：");
+                    ui.label("  • eframe/egui — GUI 框架");
+                    ui.label("  • ndarray — 数值计算");
+                    ui.label("  • ndrustfft — FFT Poisson 求解器");
+                    ui.add_space(8.0);
+                    ui.separator();
+                    ui.add_space(8.0);
+                    ui.label("许可证：MIT");
+                });
             });
     }
 
@@ -262,20 +283,43 @@ fn render_dialogs(state: &mut SimulationState) {
         egui::Window::new("快捷键说明")
             .open(&mut state.show_shortcuts_dialog)
             .resizable(false)
-            .default_size([350.0, 200.0])
-            .show(&egui::Context::default(), |ui| {
-                ui.label("画布交互：");
-                ui.label("  • 拖动粒子模式：点击选中粒子并拖拽移动");
-                ui.label("  • 放置粒子模式：点击画布创建新粒子");
-                ui.label("  • 删除粒子模式：点击粒子将其删除");
-                ui.add_space(4.0);
-                ui.separator();
-                ui.add_space(4.0);
-                ui.label("控制按钮：");
-                ui.label("  • ▶ Play / ⏸ Pause：启动/暂停模拟");
-                ui.label("  • ⏭ Step：单步执行");
-                ui.label("  • ⟳ Reset：重置模拟到初始状态");
-                ui.label("  • ← 返回：返回预设选择界面");
+            .default_size([380.0, 300.0])
+            .show(ctx, |ui| {
+                egui::ScrollArea::vertical().show(ui, |ui| {
+                    ui.heading("工具模式");
+                    ui.separator();
+                    ui.add_space(4.0);
+                    ui.label("左侧面板选择三种工具：");
+                    ui.label("  • 拖动粒子 — 点击选中粒子并拖拽移动");
+                    ui.label("  • 放置粒子 — 点击画布空白处创建新粒子");
+                    ui.label("  • 删除粒子 — 点击粒子将其删除");
+                    ui.add_space(8.0);
+
+                    ui.heading("画布操作");
+                    ui.separator();
+                    ui.add_space(4.0);
+                    ui.label("  • 鼠标左键 — 根据当前工具执行操作");
+                    ui.label("  • 鼠标拖拽 — 在\"拖动粒子\"模式下移动粒子");
+                    ui.label("  • 面板显示/隐藏 — 在\"选项\"菜单中控制");
+                    ui.add_space(8.0);
+
+                    ui.heading("模拟控制");
+                    ui.separator();
+                    ui.add_space(4.0);
+                    ui.label("  • ▶ Play — 启动自动步进模拟");
+                    ui.label("  • ⏸ Pause — 暂停模拟");
+                    ui.label("  • ⏭ Step — 单步执行一个时间步");
+                    ui.label("  • ⟳ Reset — 重置到初始状态");
+                    ui.label("  • ← 返回 — 返回预设选择界面");
+                    ui.add_space(8.0);
+
+                    ui.heading("菜单栏");
+                    ui.separator();
+                    ui.add_space(4.0);
+                    ui.label("  • 文件 → 返回预设选择 / 退出");
+                    ui.label("  • 选项 → 显示/隐藏面板和热力图");
+                    ui.label("  • 帮助 → 关于 / 快捷键说明");
+                });
             });
     }
 }
@@ -421,7 +465,7 @@ fn render_simulation_panels(ctx: &egui::Context, state: &mut SimulationState) ->
     let back_flag = render_menu_bar(ctx, state);
 
     // 渲染对话框
-    render_dialogs(state);
+    render_dialogs(ctx, state);
 
     // 渲染左侧工具面板
     render_left_panel(ctx, state);
@@ -443,7 +487,7 @@ fn render_simulation_panels(ctx: &egui::Context, state: &mut SimulationState) ->
     !back_flag
 }
 
-/// 渲染中央画布
+/// 渲染中央画布（热力图 + 粒子）
 fn render_central_canvas(ctx: &egui::Context, state: &mut SimulationState) {
     let sim = &mut state.sim;
     let v_min = &mut state.v_min;
@@ -459,7 +503,7 @@ fn render_central_canvas(ctx: &egui::Context, state: &mut SimulationState) {
         let snapshot = sim.get_state_snapshot();
         let (nx, ny) = snapshot.v.dim();
 
-        // 更新 V 范围（平滑过渡）
+        // 更新 V 范围（平滑过渡）— 无论是否显示热力图都计算，因为粒子交互需要
         let mut min = f64::MAX;
         let mut max = f64::MIN;
         for val in snapshot.v.iter() {
@@ -476,52 +520,60 @@ fn render_central_canvas(ctx: &egui::Context, state: &mut SimulationState) {
             *v_max = *v_min + 1.0;
         }
 
-        // 构建像素数据
-        let mut pixels = Vec::with_capacity(nx * ny);
-        for j in (0..ny).rev() {
-            for i in 0..nx {
-                let val = snapshot.v[[i, j]];
-                let (r, g, b) = heatmap_rgb(val, *v_min, *v_max);
-                pixels.push(egui::Color32::from_rgb(r, g, b));
-            }
-        }
-
-        let color_image = ColorImage {
-            size: [nx, ny],
-            pixels,
-        };
-
-        // 复用缓存的纹理句柄，避免每帧创建新纹理
-        let texture = state.heatmap_texture.get_or_insert_with(|| {
-            ctx.load_texture("heatmap", color_image.clone(), egui::TextureOptions::NEAREST)
-        });
-        // 更新纹理内容（只更新像素数据，不重新分配 GPU 对象）
-        texture.set(color_image, egui::TextureOptions::NEAREST);
-
         // 居中放置正方形图像区域
         let avail = ui.available_rect_before_wrap();
         let max_edge = avail.size().x.min(avail.size().y);
         let center = avail.center();
         let image_rect = egui::Rect::from_center_size(center, egui::vec2(max_edge, max_edge));
 
-        // 绘制热力图并记录实际渲染区域
-        let response = ui.put(
-            image_rect,
-            egui::Image::from_texture(SizedTexture::from(&*texture))
-                .fit_to_exact_size(egui::vec2(max_edge, max_edge)),
-        );
-        let texture_rect = response.rect;
+        let texture_rect: egui::Rect;
+
+        if state.show_heatmap {
+            // 构建热力图像素数据
+            let mut pixels = Vec::with_capacity(nx * ny);
+            for j in (0..ny).rev() {
+                for i in 0..nx {
+                    let val = snapshot.v[[i, j]];
+                    let (r, g, b) = heatmap_rgb(val, *v_min, *v_max);
+                    pixels.push(egui::Color32::from_rgb(r, g, b));
+                }
+            }
+
+            let color_image = ColorImage {
+                size: [nx, ny],
+                pixels,
+            };
+
+            // 复用缓存的纹理句柄
+            let texture = state.heatmap_texture.get_or_insert_with(|| {
+                ctx.load_texture("heatmap", color_image.clone(), egui::TextureOptions::NEAREST)
+            });
+            texture.set(color_image, egui::TextureOptions::NEAREST);
+
+            // 绘制热力图并记录实际渲染区域
+            let response = ui.put(
+                image_rect,
+                egui::Image::from_texture(SizedTexture::from(&*texture))
+                    .fit_to_exact_size(egui::vec2(max_edge, max_edge)),
+            );
+            texture_rect = response.rect;
+        } else {
+            // 不显示热力图：在画布区域绘制纯色背景
+            texture_rect = image_rect;
+            let bg_color = ui.style().visuals.panel_fill;
+            ui.painter().rect_filled(image_rect, 0.0, bg_color);
+        }
+
+        // 绘制粒子
         let painter = ui.painter();
         let particle_count = snapshot.x.len();
         let lx = if snapshot.lx <= 0.0 { 1.0 } else { snapshot.lx };
         let ly = if snapshot.ly <= 0.0 { 1.0 } else { snapshot.ly };
 
         for p in 0..particle_count {
-            // 世界坐标转归一化 [0,1]，偏移 0.5 像素对齐热力图像素中心
             let nx_p = (((snapshot.x[p] / lx) * nx as f64 + 0.5) / nx as f64).clamp(0.0, 1.0);
             let ny_p = (((snapshot.y[p] / ly) * ny as f64 + 0.5) / ny as f64).clamp(0.0, 1.0);
 
-            // 映射到屏幕坐标（热力图区域）
             let sx = texture_rect.left() + nx_p as f32 * texture_rect.width();
             let sy = texture_rect.bottom() - ny_p as f32 * texture_rect.height();
 
@@ -531,24 +583,12 @@ fn render_central_canvas(ctx: &egui::Context, state: &mut SimulationState) {
                 egui::Color32::WHITE
             };
 
-            // 绘制粒子圆点
-            painter.circle_filled(
-                egui::pos2(sx, sy),
-                3.0,
-                color,
-            );
+            painter.circle_filled(egui::pos2(sx, sy), 3.0, color);
         }
 
-        // 处理鼠标交互（根据当前工具模式）
+        // 处理鼠标交互
         handle_mouse_interaction(
-            ui,
-            sim,
-            interaction,
-            texture_rect,
-            nx,
-            ny,
-            lx,
-            ly,
+            ui, sim, interaction, texture_rect, nx, ny, lx, ly,
         );
     });
 }
@@ -578,8 +618,6 @@ fn handle_mouse_interaction(
     }
 
     // 归一化鼠标位置到 [0,1]（纹理坐标系）
-    // tex_u: left=0.0, right=1.0
-    // tex_v: top=1.0, bottom=0.0（对应纹理坐标 Y 轴向上）
     let tex_u = ((pos.x - texture_rect.left()) / texture_rect.width()).clamp(0.0f32, 1.0f32);
     let tex_v = ((texture_rect.bottom() - pos.y) / texture_rect.height()).clamp(0.0f32, 1.0f32);
 
@@ -598,7 +636,7 @@ fn handle_mouse_interaction(
                 pos, tex_u, tex_v, tex_u_f64, tex_v_f64, world_x, world_y,
                 mouse_down,
             );
-            // 拖动粒子时标记场已过期（位置已改变）
+            // 拖动粒子时标记场已过期
             if interaction.dragging && mouse_down {
                 sim.v = None;
                 sim.ex = None;
@@ -607,12 +645,8 @@ fn handle_mouse_interaction(
         }
         ToolMode::PlaceParticle => {
             if mouse_clicked {
-                // 在点击位置创建新粒子
                 let charge = interaction.place_params.charge;
-                let vx = 0.0;
-                let vy = 0.0;
-                sim.particles.add_particle(world_x, world_y, charge, vx, vy);
-                // 标记场已过期，下一帧将重新计算
+                sim.particles.add_particle(world_x, world_y, charge, 0.0, 0.0);
                 sim.v = None;
                 sim.ex = None;
                 sim.ey = None;
@@ -621,7 +655,6 @@ fn handle_mouse_interaction(
         }
         ToolMode::DeleteParticle => {
             if mouse_clicked {
-                // 找到最近的粒子并删除
                 let particle_visual_u: Vec<f64> = sim.particles.x.iter()
                     .map(|&x| (((x / lx) * inv_nx + 0.5) / inv_nx).clamp(0.0, 1.0))
                     .collect();
@@ -643,7 +676,6 @@ fn handle_mouse_interaction(
                 if let Some(idx) = min_index {
                     if min_dist <= interaction.selection_radius {
                         sim.particles.remove_particle(idx);
-                        // 标记场已过期，下一帧将重新计算
                         sim.v = None;
                         sim.ex = None;
                         sim.ey = None;
@@ -654,14 +686,13 @@ fn handle_mouse_interaction(
         }
     }
 
-    // 鼠标释放时重置拖动状态
     if !mouse_down {
         interaction.dragging = false;
         interaction.dragged_particle_index = None;
     }
 }
 
-/// 处理拖动粒子交互（保持原有的拖动逻辑）
+/// 处理拖动粒子交互
 fn handle_drag_interaction(
     _ui: &egui::Ui,
     sim: &mut ElectrostaticSim2D,
@@ -685,7 +716,6 @@ fn handle_drag_interaction(
 
     if mouse_down {
         if !interaction.dragging {
-            // 尝试选择最近的粒子（在视觉坐标空间中比较，即带半像素偏移的归一化坐标）
             let particle_visual_u: Vec<f64> = sim.particles.x.iter()
                 .map(|&x| (((x / lx) * inv_nx + 0.5) / inv_nx).clamp(0.0, 1.0))
                 .collect();
@@ -712,7 +742,6 @@ fn handle_drag_interaction(
             }
         }
 
-        // 正在拖动：更新粒子位置
         if let Some(idx) = interaction.dragged_particle_index {
             sim.particles.x[idx] = world_x;
             sim.particles.y[idx] = world_y;
@@ -720,7 +749,6 @@ fn handle_drag_interaction(
             sim.particles.vy[idx] = 0.0;
         }
     } else {
-        // 鼠标释放
         interaction.dragging = false;
         interaction.dragged_particle_index = None;
     }
