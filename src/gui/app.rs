@@ -540,6 +540,65 @@ fn render_right_panel(ctx: &egui::Context, state: &mut SimulationState) {
                     BoundaryType::Reflective => "粒子撞到边界后反弹",
                     BoundaryType::Open => "粒子移出边界即被删除",
                 });
+
+                ui.add_space(16.0);
+                ui.separator();
+                ui.add_space(8.0);
+
+                // 重力设置
+                ui.label("重力设置：");
+                ui.checkbox(&mut state.sim.gravity_enabled, "启用重力");
+                if state.sim.gravity_enabled {
+                    ui.add_space(4.0);
+                    ui.horizontal(|ui| {
+                        ui.set_min_width(50.0);
+                        ui.label("大小：");
+                    });
+                    ui.add(egui::Slider::new(&mut state.sim.gravity_y, -50.0..=50.0)
+                        .text("g")
+                        .step_by(0.1));
+                    ui.add_space(4.0);
+                    ui.horizontal(|ui| {
+                        ui.label("方向：");
+                        let mut dir_idx = if state.sim.gravity_y < 0.0 {
+                            0usize // 向下
+                        } else if state.sim.gravity_y > 0.0 {
+                            1usize // 向上
+                        } else {
+                            0usize
+                        };
+                        let dirs = ["↓ 向下", "↑ 向上"];
+                        let changed = ui.radio_value(&mut dir_idx, 0, dirs[0]).changed()
+                            || ui.radio_value(&mut dir_idx, 1, dirs[1]).changed();
+                        if changed {
+                            let abs_val = state.sim.gravity_y.abs().max(1.0);
+                            state.sim.gravity_y = if dir_idx == 0 { -abs_val } else { abs_val };
+                        }
+                    });
+                    ui.add_space(4.0);
+                    ui.label(format!("当前重力: ({:.2}, {:.2})", state.sim.gravity_x, state.sim.gravity_y));
+                }
+
+                ui.add_space(16.0);
+                ui.separator();
+                ui.add_space(8.0);
+
+                // 摩擦力设置
+                ui.label("摩擦力设置：");
+                ui.checkbox(&mut state.sim.friction_enabled, "启用摩擦力");
+                if state.sim.friction_enabled {
+                    ui.add_space(4.0);
+                    ui.horizontal(|ui| {
+                        ui.set_min_width(50.0);
+                        ui.label("阻尼：");
+                    });
+                    ui.add(egui::Slider::new(&mut state.sim.friction_damping, 0.0..=5.0)
+                        .text("系数")
+                        .step_by(0.01));
+                    ui.add_space(4.0);
+                    ui.label("F = -damping × v");
+                    ui.label("值越大，粒子减速越快");
+                }
             });
         });
 }

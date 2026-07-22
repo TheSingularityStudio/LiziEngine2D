@@ -9,7 +9,7 @@ use crate::core::boundary::BoundaryType;
 const MAGIC_HEADER: &[u8; 4] = b"LZ2D";
 
 /// 当前文件格式版本
-const LZ2D_VERSION: u32 = 1;
+const LZ2D_VERSION: u32 = 3;
 
 /// 内部序列化结构（不直接暴露）
 #[derive(Serialize, Deserialize)]
@@ -28,6 +28,13 @@ struct Lz2dFile {
     particles_vx: Vec<f64>,
     particles_vy: Vec<f64>,
     particles_q: Vec<f64>,
+    /// 重力参数（v2 新增）
+    gravity_enabled: bool,
+    gravity_x: f64,
+    gravity_y: f64,
+    /// 摩擦力参数（v3 新增）
+    friction_enabled: bool,
+    friction_damping: f64,
 }
 
 impl Lz2dFile {
@@ -53,6 +60,11 @@ impl Lz2dFile {
             particles_vx: sim.particles.vx.to_vec(),
             particles_vy: sim.particles.vy.to_vec(),
             particles_q: sim.particles.q.to_vec(),
+            gravity_enabled: sim.gravity_enabled,
+            gravity_x: sim.gravity_x,
+            gravity_y: sim.gravity_y,
+            friction_enabled: sim.friction_enabled,
+            friction_damping: sim.friction_damping,
         }
     }
 
@@ -78,13 +90,18 @@ impl Lz2dFile {
 
         let grid = Grid2D::new(self.grid_nx, self.grid_ny, self.grid_dx, self.grid_dy);
 
-        let sim = ElectrostaticSim2D::with_config(
+        let mut sim = ElectrostaticSim2D::with_config(
             grid,
             particles,
             self.eps_poisson,
             boundary_type,
             self.max_speed,
         );
+        sim.gravity_enabled = self.gravity_enabled;
+        sim.gravity_x = self.gravity_x;
+        sim.gravity_y = self.gravity_y;
+        sim.friction_enabled = self.friction_enabled;
+        sim.friction_damping = self.friction_damping;
 
         Ok((sim, self.step_count))
     }
