@@ -48,7 +48,6 @@ struct SimulationState {
     variant: PresetVariant,
     sim: ElectrostaticSim2D,
     paused: bool,
-    step_count: usize,
     /// 平滑后的 V 范围
     v_min: f64,
     v_max: f64,
@@ -131,7 +130,6 @@ impl LiziApp {
                                     variant: *variant,
                                     sim,
                                     paused: false,
-                                    step_count: 0,
                                     v_min: 0.0,
                                     v_max: 1.0,
                                     interaction: InteractionState::new(),
@@ -170,10 +168,9 @@ fn render_menu_bar(ctx: &egui::Context, state: &mut SimulationState) -> bool {
                         .pick_file()
                     {
                         match lz2d::load_from_file(path.to_string_lossy().as_ref()) {
-                            Ok((loaded_sim, loaded_step_count)) => {
+                            Ok((loaded_sim, _loaded_step_count)) => {
                                 // 更新当前模拟器状态
                                 state.sim = loaded_sim;
-                                state.step_count = loaded_step_count;
                                 state.paused = true;
                                 state.v_min = 0.0;
                                 state.v_max = 1.0;
@@ -198,7 +195,7 @@ fn render_menu_bar(ctx: &egui::Context, state: &mut SimulationState) -> bool {
                         .set_file_name("scene.lz2d")
                         .save_file()
                     {
-                        match lz2d::save_to_file(&state.sim, state.step_count, path.to_string_lossy().as_ref()) {
+                        match lz2d::save_to_file(&state.sim, 0, path.to_string_lossy().as_ref()) {
                             Ok(()) => {
                                 state.message_dialog = Some(format!("✅ 成功导出场景\n路径: {}", path.display()));
                             }
@@ -252,7 +249,6 @@ fn render_menu_bar(ctx: &egui::Context, state: &mut SimulationState) -> bool {
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                 // 模拟信息
                 ui.label(format!("预设: {}", state.variant.display_name()));
-                ui.label(format!("步数: {}", state.step_count));
                 if let Some(v) = state.sim.v.as_ref() {
                     let actual_min = v.iter().cloned().fold(f64::MAX, f64::min);
                     let actual_max = v.iter().cloned().fold(f64::MIN, f64::max);
@@ -264,7 +260,6 @@ fn render_menu_bar(ctx: &egui::Context, state: &mut SimulationState) -> bool {
                 if ui.button("⟳ Reset").clicked() {
                     let new_sim = state.variant.create_sim();
                     state.sim = new_sim;
-                    state.step_count = 0;
                     state.paused = false;
                     state.v_min = 0.0;
                     state.v_max = 1.0;
@@ -274,7 +269,6 @@ fn render_menu_bar(ctx: &egui::Context, state: &mut SimulationState) -> bool {
                     state.paused = true;
                     let dt = state.variant.config().dt;
                     state.sim.step(dt);
-                    state.step_count += 1;
                 }
                 if state.paused {
                     if ui.button("▶ Play").clicked() {
@@ -709,7 +703,6 @@ fn render_simulation_panels(ctx: &egui::Context, state: &mut SimulationState) ->
     if !state.paused {
         let dt = state.variant.config().dt;
         state.sim.step(dt);
-        state.step_count += 1;
         ctx.request_repaint();
     }
 
