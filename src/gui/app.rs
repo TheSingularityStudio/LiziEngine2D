@@ -522,6 +522,14 @@ fn render_right_panel(ctx: &egui::Context, state: &mut SimulationState) {
                                                 .step_by(0.1)
                                         );
                                     });
+                                    ui.horizontal(|ui| {
+                                        ui.label("质量：");
+                                        ui.add(
+                                            egui::Slider::new(&mut entry.mass, 0.1..=10.0)
+                                                .text("m")
+                                                .step_by(0.1)
+                                        );
+                                    });
                                     ui.checkbox(&mut entry.fixed, "固定（速度=0）");
                                 });
                                 ui.add_space(4.0);
@@ -561,6 +569,15 @@ fn render_right_panel(ctx: &egui::Context, state: &mut SimulationState) {
                             });
                             ui.add(egui::Slider::new(&mut interaction.place_params.charge, -10.0..=10.0)
                                 .text("q")
+                                .step_by(0.1));
+
+                            // 质量
+                            ui.horizontal(|ui| {
+                                ui.set_min_width(60.0);
+                                ui.label("质量：");
+                            });
+                            ui.add(egui::Slider::new(&mut interaction.place_params.mass, 0.1..=10.0)
+                                .text("m")
                                 .step_by(0.1));
 
                             // 固定粒子选项
@@ -878,7 +895,7 @@ fn handle_mouse_interaction(
                         let py = (world_y + dy).clamp(0.0, ly);
                         let vx = if entry.fixed { 0.0 } else { 0.0 };
                         let vy = if entry.fixed { 0.0 } else { 0.0 };
-                        sim.particles.add_particle(px, py, entry.charge, vx, vy);
+                        sim.particles.add_particle(px, py, entry.charge, entry.mass, vx, vy);
                     }
                     sim.v = None;
                     sim.ex = None;
@@ -887,10 +904,11 @@ fn handle_mouse_interaction(
                 } else {
                     // 快速放置模式：放置单个粒子
                     let charge = interaction.place_params.charge;
+                    let mass = interaction.place_params.mass;
                     let fixed = interaction.place_params.fixed;
                     let vx = if fixed { 0.0 } else { 0.0 };
                     let vy = if fixed { 0.0 } else { 0.0 };
-                    sim.particles.add_particle(world_x, world_y, charge, vx, vy);
+                    sim.particles.add_particle(world_x, world_y, charge, mass, vx, vy);
                     sim.v = None;
                     sim.ex = None;
                     sim.ey = None;

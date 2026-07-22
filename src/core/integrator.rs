@@ -6,7 +6,7 @@ use crate::core::particles::ParticleState;
 ///   v_{n+1} = v_n + a_n * dt
 ///   x_{n+1} = x_n + v_{n+1} * dt
 ///
-/// 由于 q=1、m=1，加速度 a = F
+/// 加速度 a = F / m
 ///
 /// 注意：边界处理由调用方（`apply_boundary_conditions`）根据边界类型执行，
 /// 此处不做任何边界包裹，允许粒子自由移动。
@@ -16,9 +16,10 @@ pub fn step_half_implicit_euler(
     dt: f64,
 ) {
     for p in 0..particles.len() {
-        // v += a * dt (a = F 因为 q=1, m=1)
-        particles.vx[p] += particles.fx[p] * dt;
-        particles.vy[p] += particles.fy[p] * dt;
+        // v += a * dt (a = F / m)
+        let inv_m = 1.0 / particles.m[p];
+        particles.vx[p] += particles.fx[p] * inv_m * dt;
+        particles.vy[p] += particles.fy[p] * inv_m * dt;
 
         // x += v * dt
         particles.x[p] += particles.vx[p] * dt;

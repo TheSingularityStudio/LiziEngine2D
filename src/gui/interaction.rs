@@ -36,6 +36,7 @@ impl ToolMode {
 #[derive(Debug, Clone)]
 pub struct PlaceParticleParams {
     pub charge: f64, // 电荷量
+    pub mass: f64,   // 质量
     pub fixed: bool, // 是否固定粒子（速度为0）
 }
 
@@ -43,6 +44,7 @@ impl Default for PlaceParticleParams {
     fn default() -> Self {
         Self {
             charge: 1.0,
+            mass: 1.0,
             fixed: false,
         }
     }
@@ -52,6 +54,7 @@ impl Default for PlaceParticleParams {
 #[derive(Debug, Clone)]
 pub struct PlacementEntry {
     pub charge: f64,
+    pub mass: f64,
     pub fixed: bool,
 }
 
@@ -59,6 +62,7 @@ impl Default for PlacementEntry {
     fn default() -> Self {
         Self {
             charge: 1.0,
+            mass: 1.0,
             fixed: false,
         }
     }

@@ -137,6 +137,7 @@ mod tests {
             fx: ndarray::arr1(&[0.0, 0.0, 0.0]),
             fy: ndarray::arr1(&[0.0, 0.0, 0.0]),
             q: ndarray::arr1(&[1.0, 1.0, 1.0]),
+            m: ndarray::arr1(&[1.0, 1.0, 1.0]),
         }
     }
 
