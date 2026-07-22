@@ -1,7 +1,8 @@
 use crate::core::grid::Grid2D;
 use crate::core::particles::ParticleState;
 use crate::core::sim::ElectrostaticSim2D;
-use crate::visual::{MinifbRenderer, VisualWindow};
+use crate::visual::minifb_renderer::MinifbRenderer;
+use crate::visual::window::VisualWindow;
 
 /// Demo：单点电荷可视化
 ///

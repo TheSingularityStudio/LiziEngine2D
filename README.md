@@ -1,5 +1,5 @@
 # LiziEngine2D
-LiziEngine2D - 2D 电静场（CPU）模拟器（Python）
+LiziEngine2D - 2D 静电（电场-粒子）CPU 模拟器（Rust）
 
 - 使用 PIC 风格流水线：
   - 粒子散射（双线性）→ 网格离散电荷密度 ρ

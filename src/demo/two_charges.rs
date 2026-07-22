@@ -8,22 +8,24 @@ use crate::visual::window::VisualWindow;
 ///
 /// 在网格上放置两个电荷，显示叠加 V 热力图和粒子位置。
 /// 支持鼠标拖动粒子、Space 暂停/继续。
+/// `opposite_sign=true` 时第一个电荷为正，第二个为负。
 /// 使用 minifb 轻量窗口渲染。
 pub fn run(nx: usize, ny: usize, dx: f64, dy: f64, eps: f64, opposite_sign: bool) {
     let grid = Grid2D::new(nx, ny, dx, dy);
     let lx = grid.lx();
     let ly = grid.ly();
     
-    // 创建两个粒子的模拟器
-    let mut particles = ParticleState::zeros(2, Some(0));
+    // 创建两个粒子的模拟器，使用 with_charges 设置电荷量
+    let charges = if opposite_sign {
+        vec![1.0, -1.0]
+    } else {
+        vec![1.0, 1.0]
+    };
+    let mut particles = ParticleState::with_charges(2, Some(0), &charges);
     particles.x[0] = 0.25 * lx;
     particles.y[0] = 0.5 * ly;
     particles.x[1] = 0.75 * lx;
     particles.y[1] = 0.5 * ly;
-    
-    // 注意：当前系统假设所有粒子带单位正电荷
-    // opposite_sign 参数暂时不影响物理计算，只影响标题
-    // 要真正支持异号电荷，需要扩展 ParticleState 添加电荷属性
     
     let mut sim = ElectrostaticSim2D::new(grid, particles, eps);
     
@@ -37,6 +39,9 @@ pub fn run(nx: usize, ny: usize, dx: f64, dy: f64, eps: f64, opposite_sign: bool
     
     println!("Two Charges Demo started. Press ESC to close, Space to pause/resume.");
     println!("You can drag particles with the mouse.");
+    if opposite_sign {
+        println!("First particle: +1 (yellow), Second particle: -1 (cyan)");
+    }
     
     // 时间步长
     let dt = 0.05;

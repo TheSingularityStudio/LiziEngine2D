@@ -165,12 +165,14 @@ impl MinifbRenderer {
     }
 
     /// 渲染粒子，高亮显示被拖动的粒子
+    /// 如果 snapshot 传入了电荷信息，负电荷显示青色，正电荷显示白色
     fn render_particles_with_highlight(
         &mut self,
         x: &ndarray::Array1<f64>,
         y: &ndarray::Array1<f64>,
         lx: f64,
         ly: f64,
+        charges: Option<&ndarray::Array1<f64>>,
     ) {
         let dot_radius: isize = 2;
         let dragged_idx = self.interaction.dragged_particle();
@@ -186,11 +188,17 @@ impl MinifbRenderer {
             let px = ((nx * self.width as f64) as usize).min(self.width - 1);
             let py = ((ny * self.height as f64) as usize).min(self.height - 1);
 
-            // 选择颜色：被拖动的粒子为黄色，其他为白色
+            // 根据电荷量和拖动状态选择颜色
             let dot_color = if dragged_idx == Some(p) {
-                0x00FFFF00u32 // 黄色
+                0x00FFFF00u32 // 被拖动的粒子：黄色
+            } else if let Some(q) = charges {
+                if q[p] < 0.0 {
+                    0x0000FFFFu32 // 负电荷：青色
+                } else {
+                    0x00FFFFFFu32 // 正电荷：白色
+                }
             } else {
-                0x00FFFFFFu32 // 白色
+                0x00FFFFFFu32 // 无电荷信息：白色
             };
 
             // 如果被拖动，绘制稍大的圆点
@@ -243,6 +251,19 @@ impl MinifbRenderer {
     pub fn get_pending_particle_updates(&mut self) -> Vec<(usize, f64, f64)> {
         std::mem::take(&mut self.pending_updates)
     }
+
+    /// 获取当前鼠标在世界坐标中的位置（如果有鼠标）
+    pub fn get_mouse_world_position(&self, lx: f64, ly: f64) -> Option<(f64, f64)> {
+        let (lx, ly) = (if lx <= 0.0 { 1.0 } else { lx }, if ly <= 0.0 { 1.0 } else { ly });
+        match self.window.get_mouse_pos(minifb::MouseMode::Clamp) {
+            Some((x, y)) => {
+                let nx = x as f64 / self.width as f64;
+                let ny = y as f64 / self.height as f64;
+                Some((nx * lx, ny * ly))
+            }
+            None => None,
+        }
+    }
 }
 
 impl VisualWindow for MinifbRenderer {
@@ -258,30 +279,20 @@ impl VisualWindow for MinifbRenderer {
         // 克隆 snapshot 以便修改（用于交互）
         let mut mutable_snapshot = snapshot.clone();
 
-        if !self.paused {
-            // 渲染 V 热力图
-            self.render_heatmap(&mutable_snapshot.v);
+        // 渲染 V 热力图（暂停时也需要渲染，否则黑屏）
+        self.render_heatmap(&mutable_snapshot.v);
 
-            // 处理鼠标交互
-            self.handle_mouse_interaction(&mut mutable_snapshot);
+        // 处理鼠标交互
+        self.handle_mouse_interaction(&mut mutable_snapshot);
 
-            // 叠加粒子（使用高亮渲染）
-            self.render_particles_with_highlight(
-                &mutable_snapshot.x,
-                &mutable_snapshot.y,
-                mutable_snapshot.lx,
-                mutable_snapshot.ly,
-            );
-        } else {
-            // 暂停时也允许拖动粒子
-            self.handle_mouse_interaction(&mut mutable_snapshot);
-            self.render_particles_with_highlight(
-                &mutable_snapshot.x,
-                &mutable_snapshot.y,
-                mutable_snapshot.lx,
-                mutable_snapshot.ly,
-            );
-        }
+        // 叠加粒子（使用高亮渲染，传递电荷信息）
+        self.render_particles_with_highlight(
+            &mutable_snapshot.x,
+            &mutable_snapshot.y,
+            mutable_snapshot.lx,
+            mutable_snapshot.ly,
+            Some(&mutable_snapshot.q),
+        );
 
         // 更新窗口
         self.window

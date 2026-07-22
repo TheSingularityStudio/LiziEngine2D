@@ -80,14 +80,15 @@ impl ElectrostaticSim2D {
         let (ex, ey) = compute_e_from_potential_periodic(&v, self.grid.dx, self.grid.dy);
 
         // gather 电场到粒子受力
-        let (fx, fy) = gather_field_to_particles_bilinear(
+        let (ex_at_parts, ey_at_parts) = gather_field_to_particles_bilinear(
             &self.grid,
             &self.particles,
             &ex,
             &ey,
         );
-        self.particles.fx = fx;
-        self.particles.fy = fy;
+        // F = q * E
+        self.particles.fx = &ex_at_parts * &self.particles.q;
+        self.particles.fy = &ey_at_parts * &self.particles.q;
 
         self.rho = Some(rho);
         self.v = Some(v);
@@ -154,6 +155,7 @@ impl ElectrostaticSim2D {
             y: self.particles.y.clone(),
             vx: self.particles.vx.clone(),
             vy: self.particles.vy.clone(),
+            q: self.particles.q.clone(),
             v: self.v.as_ref().unwrap().clone(),
             ex: self.ex.as_ref().unwrap().clone(),
             ey: self.ey.as_ref().unwrap().clone(),
@@ -170,6 +172,7 @@ pub struct StateSnapshot {
     pub y: ndarray::Array1<f64>,
     pub vx: ndarray::Array1<f64>,
     pub vy: ndarray::Array1<f64>,
+    pub q: ndarray::Array1<f64>,
     pub v: Array2<f64>,
     pub ex: Array2<f64>,
     pub ey: Array2<f64>,

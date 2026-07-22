@@ -101,6 +101,7 @@ mod tests {
             vy: ndarray::arr1(&[0.0, 1.0, 0.0]),
             fx: ndarray::arr1(&[0.0, 0.0, 0.0]),
             fy: ndarray::arr1(&[0.0, 0.0, 0.0]),
+            q: ndarray::arr1(&[1.0, 1.0, 1.0]),
         }
     }
 
