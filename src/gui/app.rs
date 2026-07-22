@@ -52,6 +52,7 @@ struct SimulationState {
     show_left_panel: bool,
     show_right_panel: bool,
     show_heatmap: bool,
+    show_grid: bool,
     show_about_dialog: bool,
     show_shortcuts_dialog: bool,
     message_dialog: Option<String>,
@@ -115,7 +116,7 @@ impl LiziApp {
                                     interaction: InteractionState::new(),
                                     heatmap_texture: None,
                                     show_left_panel: true, show_right_panel: true,
-                                    show_heatmap: true,
+                                    show_heatmap: true, show_grid: false,
                                     show_about_dialog: false, show_shortcuts_dialog: false,
                                     message_dialog: None,
                                 });
@@ -182,6 +183,8 @@ fn render_menu_bar(ctx: &egui::Context, state: &mut SimulationState) -> bool {
                 ui.separator();
                 let mut show_heatmap = state.show_heatmap;
                 if ui.checkbox(&mut show_heatmap, "显示热力图").changed() { state.show_heatmap = show_heatmap; }
+                let mut show_grid = state.show_grid;
+                if ui.checkbox(&mut show_grid, "显示网格").changed() { state.show_grid = show_grid; }
             });
             ui.menu_button("帮助", |ui| {
                 if ui.button("关于 LiziEngine2D").clicked() { state.show_about_dialog = true; ui.close_menu(); }
@@ -588,6 +591,29 @@ fn render_central_canvas(ctx: &egui::Context, state: &mut SimulationState) {
 
         // 绘制粒子
         let painter = ui.painter();
+
+        // 绘制网格（如果启用）
+        if state.show_grid {
+            let grid_color = egui::Color32::from_gray(100);
+            let cell_w = texture_rect.width() / nx as f32;
+            let cell_h = texture_rect.height() / ny as f32;
+            // 垂直线
+            for i in 0..=nx {
+                let x = texture_rect.left() + i as f32 * cell_w;
+                painter.line_segment(
+                    [egui::pos2(x, texture_rect.top()), egui::pos2(x, texture_rect.bottom())],
+                    (0.5, grid_color),
+                );
+            }
+            // 水平线
+            for j in 0..=ny {
+                let y = texture_rect.bottom() - j as f32 * cell_h;
+                painter.line_segment(
+                    [egui::pos2(texture_rect.left(), y), egui::pos2(texture_rect.right(), y)],
+                    (0.5, grid_color),
+                );
+            }
+        }
         let particle_count = snapshot.x.len();
         let lx = if snapshot.lx <= 0.0 { 1.0 } else { snapshot.lx };
         let ly = if snapshot.ly <= 0.0 { 1.0 } else { snapshot.ly };
