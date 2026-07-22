@@ -1,11 +1,11 @@
-use std::cell::Cell;
 use std::sync::Arc;
 use eframe::egui;
 use egui::ColorImage;
 use egui::TextureHandle;
 use egui::load::SizedTexture;
+use egui::menu;
 
-use crate::gui::interaction::InteractionState;
+use crate::gui::interaction::{InteractionState, ToolMode};
 use crate::core::sim::ElectrostaticSim2D;
 use crate::presets::PresetVariant;
 use crate::visual::colors::heatmap_rgb;
@@ -54,6 +54,12 @@ struct SimulationState {
     interaction: InteractionState,
     /// 缓存的纹理句柄（避免每帧重新创建）
     heatmap_texture: Option<TextureHandle>,
+    /// 面板可见性
+    show_left_panel: bool,
+    show_right_panel: bool,
+    /// 弹窗状态
+    show_about_dialog: bool,
+    show_shortcuts_dialog: bool,
 }
 
 /// LiziEngine2D 主 GUI 应用
@@ -73,7 +79,7 @@ impl LiziApp {
     pub fn run() {
         let native_options = eframe::NativeOptions {
             viewport: egui::ViewportBuilder::default()
-                .with_inner_size([800.0, 700.0]),
+                .with_inner_size([1100.0, 700.0]),
             ..Default::default()
         };
         let _ = eframe::run_native(
@@ -124,6 +130,10 @@ impl LiziApp {
                                     v_max: 1.0,
                                     interaction: InteractionState::new(),
                                     heatmap_texture: None,
+                                    show_left_panel: true,
+                                    show_right_panel: true,
+                                    show_about_dialog: false,
+                                    show_shortcuts_dialog: false,
                                 });
                             }
                             ui.add_space(10.0);
@@ -137,78 +147,309 @@ impl LiziApp {
     }
 }
 
-/// 渲染模拟界面（top panel + central panel）
+/// 渲染菜单栏
+fn render_menu_bar(ctx: &egui::Context, state: &mut SimulationState) -> bool {
+    let mut back_requested = false;
+
+    egui::TopBottomPanel::top("menu_bar").show(ctx, |ui| {
+        menu::bar(ui, |ui| {
+            // ---- 文件菜单 ----
+            ui.menu_button("文件", |ui| {
+                if ui.button("返回预设选择").clicked() {
+                    back_requested = true;
+                    ui.close_menu();
+                }
+                ui.separator();
+                if ui.button("退出").clicked() {
+                    std::process::exit(0);
+                }
+            });
+
+            // ---- 选项菜单 ----
+            ui.menu_button("选项", |ui| {
+                let mut show_left = state.show_left_panel;
+                if ui.checkbox(&mut show_left, "显示工具面板").changed() {
+                    state.show_left_panel = show_left;
+                }
+                let mut show_right = state.show_right_panel;
+                if ui.checkbox(&mut show_right, "显示参数面板").changed() {
+                    state.show_right_panel = show_right;
+                }
+            });
+
+            // ---- 帮助菜单 ----
+            ui.menu_button("帮助", |ui| {
+                if ui.button("关于 LiziEngine2D").clicked() {
+                    state.show_about_dialog = true;
+                    ui.close_menu();
+                }
+                if ui.button("快捷键说明").clicked() {
+                    state.show_shortcuts_dialog = true;
+                    ui.close_menu();
+                }
+            });
+
+            // ---- 右侧控制按钮（在菜单栏同一行） ----
+            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                // 模拟信息
+                ui.label(format!("预设: {}", state.variant.display_name()));
+                ui.label(format!("步数: {}", state.step_count));
+                if let Some(v) = state.sim.v.as_ref() {
+                    let actual_min = v.iter().cloned().fold(f64::MAX, f64::min);
+                    let actual_max = v.iter().cloned().fold(f64::MIN, f64::max);
+                    ui.label(format!("V: [{:.2e}, {:.2e}]", actual_min, actual_max));
+                }
+                ui.label(format!("粒子数: {}", state.sim.particles.len()));
+                ui.separator();
+
+                if ui.button("⟳ Reset").clicked() {
+                    let new_sim = state.variant.create_sim();
+                    state.sim = new_sim;
+                    state.step_count = 0;
+                    state.paused = false;
+                    state.v_min = 0.0;
+                    state.v_max = 1.0;
+                    state.interaction = InteractionState::new();
+                }
+                if ui.button("⏭ Step").clicked() {
+                    state.paused = true;
+                    let dt = state.variant.config().dt;
+                    state.sim.step(dt);
+                    state.step_count += 1;
+                }
+                if state.paused {
+                    if ui.button("▶ Play").clicked() {
+                        state.paused = false;
+                    }
+                } else {
+                    if ui.button("⏸ Pause").clicked() {
+                        state.paused = true;
+                    }
+                }
+
+                if ui.button("← 返回").clicked() {
+                    back_requested = true;
+                }
+            });
+        });
+    });
+
+    back_requested
+}
+
+/// 渲染对话框
+fn render_dialogs(state: &mut SimulationState) {
+    // 关于对话框
+    if state.show_about_dialog {
+        egui::Window::new("关于 LiziEngine2D")
+            .open(&mut state.show_about_dialog)
+            .resizable(false)
+            .default_size([400.0, 200.0])
+            .show(&egui::Context::default(), |ui| {
+                ui.heading("LiziEngine2D");
+                ui.label("版本 0.1.0");
+                ui.separator();
+                ui.add_space(8.0);
+                ui.label("二维静电 PIC (Particle-in-Cell) 模拟器");
+                ui.label("使用 Rust + egui 实现");
+                ui.add_space(8.0);
+                ui.label("GitHub: https://github.com/TheSingularityStudio/LiziEngine2D");
+            });
+    }
+
+    // 快捷键说明对话框
+    if state.show_shortcuts_dialog {
+        egui::Window::new("快捷键说明")
+            .open(&mut state.show_shortcuts_dialog)
+            .resizable(false)
+            .default_size([350.0, 200.0])
+            .show(&egui::Context::default(), |ui| {
+                ui.label("画布交互：");
+                ui.label("  • 拖动粒子模式：点击选中粒子并拖拽移动");
+                ui.label("  • 放置粒子模式：点击画布创建新粒子");
+                ui.label("  • 删除粒子模式：点击粒子将其删除");
+                ui.add_space(4.0);
+                ui.separator();
+                ui.add_space(4.0);
+                ui.label("控制按钮：");
+                ui.label("  • ▶ Play / ⏸ Pause：启动/暂停模拟");
+                ui.label("  • ⏭ Step：单步执行");
+                ui.label("  • ⟳ Reset：重置模拟到初始状态");
+                ui.label("  • ← 返回：返回预设选择界面");
+            });
+    }
+}
+
+/// 渲染左侧工具选择面板
+fn render_left_panel(ctx: &egui::Context, state: &mut SimulationState) {
+    if !state.show_left_panel { return; }
+    let interaction = &mut state.interaction;
+    egui::SidePanel::left("tool_panel")
+        .resizable(false)
+        .default_width(140.0)
+        .show(ctx, |ui| {
+            ui.vertical(|ui| {
+                ui.add_space(8.0);
+                ui.heading("工具");
+                ui.separator();
+                ui.add_space(4.0);
+
+                for tool in ToolMode::all() {
+                    let is_selected = interaction.tool_mode == tool;
+                    let text = tool.display_name();
+
+                    let button = if is_selected {
+                        egui::Button::new(text)
+                            .fill(ui.style().visuals.selection.bg_fill)
+                            .min_size(egui::vec2(120.0, 32.0))
+                    } else {
+                        egui::Button::new(text)
+                            .min_size(egui::vec2(120.0, 32.0))
+                    };
+
+                    if ui.add(button).clicked() {
+                        interaction.tool_mode = tool;
+                    }
+                }
+
+                ui.add_space(16.0);
+                ui.separator();
+                ui.add_space(8.0);
+                ui.label("快捷操作提示：");
+                ui.label("拖拽可选择粒子");
+                ui.label("点击画布执行操作");
+            });
+        });
+}
+
+/// 渲染右侧参数调整面板
+fn render_right_panel(ctx: &egui::Context, state: &mut SimulationState) {
+    if !state.show_right_panel { return; }
+    let interaction = &mut state.interaction;
+    egui::SidePanel::right("param_panel")
+        .resizable(false)
+        .default_width(180.0)
+        .show(ctx, |ui| {
+            ui.vertical(|ui| {
+                ui.add_space(8.0);
+                ui.heading("参数");
+                ui.separator();
+                ui.add_space(8.0);
+
+                // 显示当前工具
+                ui.horizontal(|ui| {
+                    ui.label("当前工具：");
+                    ui.label(interaction.tool_mode.display_name());
+                });
+
+                ui.add_space(8.0);
+
+                // 根据工具模式显示不同参数
+                match interaction.tool_mode {
+                    ToolMode::DragParticle => {
+                        ui.label("拖动粒子");
+                        ui.add_space(4.0);
+                        ui.label("拖拽粒子改变其位置。");
+                        ui.label("选中时粒子速度归零。");
+
+                        ui.add_space(8.0);
+                        ui.label("选择半径：");
+                        ui.add(egui::Slider::new(&mut interaction.selection_radius, 0.01..=0.20)
+                            .text("归一化")
+                            .step_by(0.005));
+                    }
+                    ToolMode::PlaceParticle => {
+                        ui.label("放置粒子参数：");
+                        ui.add_space(4.0);
+
+                        // 电荷量
+                        ui.horizontal(|ui| {
+                            ui.set_min_width(60.0);
+                            ui.label("电荷量：");
+                        });
+                        ui.add(egui::Slider::new(&mut interaction.place_params.charge, -10.0..=10.0)
+                            .text("q")
+                            .step_by(0.1));
+
+                        // 固定粒子选项
+                        ui.add_space(4.0);
+                        ui.checkbox(&mut interaction.place_params.fixed, "固定粒子（速度=0）");
+
+                        ui.add_space(8.0);
+                        ui.separator();
+                        ui.add_space(4.0);
+                        ui.label("在画布上点击放置粒子。");
+                        if interaction.place_params.fixed {
+                            ui.label("固定粒子不会移动。");
+                        }
+                    }
+                    ToolMode::DeleteParticle => {
+                        ui.label("删除粒子");
+                        ui.add_space(4.0);
+                        ui.label("点击粒子将其删除。");
+
+                        ui.add_space(8.0);
+                        ui.label("选择半径：");
+                        ui.add(egui::Slider::new(&mut interaction.selection_radius, 0.01..=0.20)
+                            .text("归一化")
+                            .step_by(0.005));
+                    }
+                }
+
+                ui.add_space(16.0);
+                ui.separator();
+                ui.add_space(8.0);
+
+                // 模拟参数显示
+                ui.label("模拟状态：");
+
+                let dt = state.variant.config().dt;
+                ui.label(format!("dt = {:.2e}", dt));
+                if state.paused {
+                    ui.label("⏸ 已暂停");
+                } else {
+                    ui.label("▶ 运行中");
+                }
+            });
+        });
+}
+
+/// 渲染模拟界面（菜单栏 + 侧边栏 + 中央画布）
 /// 返回 false 表示用户点击了"返回"按钮
 fn render_simulation_panels(ctx: &egui::Context, state: &mut SimulationState) -> bool {
-    let back_flag = Cell::new(false);
-    let variant = state.variant;
+    // 先渲染菜单栏（返回菜单栏中的返回请求）
+    let back_flag = render_menu_bar(ctx, state);
+
+    // 渲染对话框
+    render_dialogs(state);
+
+    // 渲染左侧工具面板
+    render_left_panel(ctx, state);
+
+    // 渲染右侧参数面板
+    render_right_panel(ctx, state);
+
+    // 渲染中央画布
+    render_central_canvas(ctx, state);
+
+    // 非暂停时自动执行模拟步进
+    if !state.paused {
+        let dt = state.variant.config().dt;
+        state.sim.step(dt);
+        state.step_count += 1;
+        ctx.request_repaint();
+    }
+
+    !back_flag
+}
+
+/// 渲染中央画布
+fn render_central_canvas(ctx: &egui::Context, state: &mut SimulationState) {
     let sim = &mut state.sim;
-    let paused = &mut state.paused;
-    let step_count = &mut state.step_count;
     let v_min = &mut state.v_min;
     let v_max = &mut state.v_max;
     let interaction = &mut state.interaction;
 
-    // 顶部控制面板
-    egui::TopBottomPanel::top("sim_controls").show(ctx, |ui| {
-        ui.horizontal(|ui| {
-            // 返回按钮（使用 back_flag Cell 标记）
-            if ui.button("← 返回").clicked() {
-                back_flag.set(true);
-                return;
-            }
-
-            ui.separator();
-
-            // Play/Pause 按钮
-            if *paused {
-                if ui.button("▶ Play").clicked() {
-                    *paused = false;
-                }
-            } else {
-                if ui.button("⏸ Pause").clicked() {
-                    *paused = true;
-                }
-            }
-
-            // Step 按钮（单步执行）
-            if ui.button("⏭ Step").clicked() {
-                *paused = true;
-                let dt = variant.config().dt;
-                sim.step(dt);
-                *step_count += 1;
-            }
-
-            // Reset 按钮
-            if ui.button("⟳ Reset").clicked() {
-                let new_sim = variant.create_sim();
-                *sim = new_sim;
-                *step_count = 0;
-                *paused = false;
-                *v_min = 0.0;
-                *v_max = 1.0;
-                *interaction = InteractionState::new();
-            }
-
-            ui.separator();
-
-            // 显示模拟信息
-            ui.label(format!("预设: {}", variant.display_name()));
-            ui.label(format!("步数: {}", step_count));
-            if let Some(v) = sim.v.as_ref() {
-                let actual_min = v.iter().cloned().fold(f64::MAX, f64::min);
-                let actual_max = v.iter().cloned().fold(f64::MIN, f64::max);
-                ui.label(format!("V: [{:.2e}, {:.2e}]", actual_min, actual_max));
-            }
-            ui.label(format!("粒子数: {}", sim.particles.len()));
-        });
-    });
-
-    if back_flag.get() {
-        return false;
-    }
-
-    // 中央画布（热力图 + 粒子）
     egui::CentralPanel::default().show(ctx, |ui| {
         // 确保场已计算
         if sim.v.is_none() || sim.ex.is_none() || sim.ey.is_none() {
@@ -298,7 +539,7 @@ fn render_simulation_panels(ctx: &egui::Context, state: &mut SimulationState) ->
             );
         }
 
-        // 处理鼠标交互
+        // 处理鼠标交互（根据当前工具模式）
         handle_mouse_interaction(
             ui,
             sim,
@@ -310,19 +551,9 @@ fn render_simulation_panels(ctx: &egui::Context, state: &mut SimulationState) ->
             ly,
         );
     });
-
-    // 非暂停时自动执行模拟步进
-    if !*paused {
-        let dt = variant.config().dt;
-        sim.step(dt);
-        *step_count += 1;
-        ctx.request_repaint();
-    }
-
-    true
 }
 
-/// 处理鼠标拖动粒子交互
+/// 根据当前工具模式处理鼠标交互
 fn handle_mouse_interaction(
     ui: &egui::Ui,
     sim: &mut ElectrostaticSim2D,
@@ -336,10 +567,11 @@ fn handle_mouse_interaction(
     // 检查鼠标是否在画布区域内
     let mouse_pos = ui.input(|i| i.pointer.hover_pos());
     let mouse_down = ui.input(|i| i.pointer.any_down());
+    let mouse_clicked = ui.input(|i| i.pointer.any_click());
 
     let Some(pos) = mouse_pos else { return };
     if !texture_rect.contains(pos) {
-        // 鼠标移出画布时取消拖动
+        // 鼠标移出画布时取消任何交互
         interaction.dragging = false;
         interaction.dragged_particle_index = None;
         return;
@@ -352,13 +584,104 @@ fn handle_mouse_interaction(
     let tex_v = ((texture_rect.bottom() - pos.y) / texture_rect.height()).clamp(0.0f32, 1.0f32);
 
     // 鼠标在热力图像素中心的视觉坐标 → 逆变换回世界坐标
-    // 与粒子渲染的 ((x/lx * nx + 0.5) / nx) 互为逆运算
     let inv_nx = grid_nx as f64;
     let inv_ny = grid_ny as f64;
     let tex_u_f64 = tex_u as f64;
     let tex_v_f64 = tex_v as f64;
     let world_x = ((tex_u_f64 * inv_nx - 0.5) / inv_nx).clamp(0.0, 1.0) * lx;
     let world_y = ((tex_v_f64 * inv_ny - 0.5) / inv_ny).clamp(0.0, 1.0) * ly;
+
+    match interaction.tool_mode {
+        ToolMode::DragParticle => {
+            handle_drag_interaction(
+                ui, sim, interaction, texture_rect, grid_nx, grid_ny, lx, ly,
+                pos, tex_u, tex_v, tex_u_f64, tex_v_f64, world_x, world_y,
+                mouse_down,
+            );
+            // 拖动粒子时标记场已过期（位置已改变）
+            if interaction.dragging && mouse_down {
+                sim.v = None;
+                sim.ex = None;
+                sim.ey = None;
+            }
+        }
+        ToolMode::PlaceParticle => {
+            if mouse_clicked {
+                // 在点击位置创建新粒子
+                let charge = interaction.place_params.charge;
+                let vx = 0.0;
+                let vy = 0.0;
+                sim.particles.add_particle(world_x, world_y, charge, vx, vy);
+                // 标记场已过期，下一帧将重新计算
+                sim.v = None;
+                sim.ex = None;
+                sim.ey = None;
+                ui.ctx().request_repaint();
+            }
+        }
+        ToolMode::DeleteParticle => {
+            if mouse_clicked {
+                // 找到最近的粒子并删除
+                let particle_visual_u: Vec<f64> = sim.particles.x.iter()
+                    .map(|&x| (((x / lx) * inv_nx + 0.5) / inv_nx).clamp(0.0, 1.0))
+                    .collect();
+                let particle_visual_v: Vec<f64> = sim.particles.y.iter()
+                    .map(|&y| (((y / ly) * inv_ny + 0.5) / inv_ny).clamp(0.0, 1.0))
+                    .collect();
+
+                let mut min_dist = f64::MAX;
+                let mut min_index = None;
+                for i in 0..sim.particles.len() {
+                    let dx = particle_visual_u[i] - tex_u as f64;
+                    let dy = particle_visual_v[i] - tex_v as f64;
+                    let dist = (dx * dx + dy * dy).sqrt();
+                    if dist < min_dist {
+                        min_dist = dist;
+                        min_index = Some(i);
+                    }
+                }
+                if let Some(idx) = min_index {
+                    if min_dist <= interaction.selection_radius {
+                        sim.particles.remove_particle(idx);
+                        // 标记场已过期，下一帧将重新计算
+                        sim.v = None;
+                        sim.ex = None;
+                        sim.ey = None;
+                        ui.ctx().request_repaint();
+                    }
+                }
+            }
+        }
+    }
+
+    // 鼠标释放时重置拖动状态
+    if !mouse_down {
+        interaction.dragging = false;
+        interaction.dragged_particle_index = None;
+    }
+}
+
+/// 处理拖动粒子交互（保持原有的拖动逻辑）
+fn handle_drag_interaction(
+    _ui: &egui::Ui,
+    sim: &mut ElectrostaticSim2D,
+    interaction: &mut InteractionState,
+    _texture_rect: egui::Rect,
+    grid_nx: usize,
+    grid_ny: usize,
+    lx: f64,
+    ly: f64,
+    _pos: egui::Pos2,
+    tex_u: f32,
+    tex_v: f32,
+    _tex_u_f64: f64,
+    _tex_v_f64: f64,
+    world_x: f64,
+    world_y: f64,
+    mouse_down: bool,
+) {
+    let inv_nx = grid_nx as f64;
+    let inv_ny = grid_ny as f64;
 
     if mouse_down {
         if !interaction.dragging {

@@ -51,6 +51,52 @@ impl ParticleState {
         self.x.is_empty()
     }
 
+    /// 添加一个粒子
+    pub fn add_particle(&mut self, x: f64, y: f64, q: f64, vx: f64, vy: f64) {
+        let mut new_x: Vec<f64> = self.x.iter().copied().collect();
+        let mut new_y: Vec<f64> = self.y.iter().copied().collect();
+        let mut new_vx: Vec<f64> = self.vx.iter().copied().collect();
+        let mut new_vy: Vec<f64> = self.vy.iter().copied().collect();
+        let mut new_fx: Vec<f64> = self.fx.iter().copied().collect();
+        let mut new_fy: Vec<f64> = self.fy.iter().copied().collect();
+        let mut new_q: Vec<f64> = self.q.iter().copied().collect();
+        new_x.push(x);
+        new_y.push(y);
+        new_vx.push(vx);
+        new_vy.push(vy);
+        new_fx.push(0.0);
+        new_fy.push(0.0);
+        new_q.push(q);
+        self.x = ndarray::Array1::from_vec(new_x);
+        self.y = ndarray::Array1::from_vec(new_y);
+        self.vx = ndarray::Array1::from_vec(new_vx);
+        self.vy = ndarray::Array1::from_vec(new_vy);
+        self.fx = ndarray::Array1::from_vec(new_fx);
+        self.fy = ndarray::Array1::from_vec(new_fy);
+        self.q = ndarray::Array1::from_vec(new_q);
+    }
+
+    /// 删除指定索引的粒子
+    pub fn remove_particle(&mut self, index: usize) {
+        if index >= self.len() {
+            return;
+        }
+        let remove_at = |i: usize, arr: &ndarray::Array1<f64>| -> ndarray::Array1<f64> {
+            let v: Vec<f64> = arr.iter().enumerate()
+                .filter(|&(j, _)| j != i)
+                .map(|(_, &v)| v)
+                .collect();
+            ndarray::Array1::from_vec(v)
+        };
+        self.x = remove_at(index, &self.x);
+        self.y = remove_at(index, &self.y);
+        self.vx = remove_at(index, &self.vx);
+        self.vy = remove_at(index, &self.vy);
+        self.fx = remove_at(index, &self.fx);
+        self.fy = remove_at(index, &self.fy);
+        self.q = remove_at(index, &self.q);
+    }
+
     /// 深拷贝
     pub fn copy(&self) -> Self {
         Self {
