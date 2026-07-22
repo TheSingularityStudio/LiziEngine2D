@@ -270,9 +270,9 @@ fn render_simulation_panels(ctx: &egui::Context, state: &mut SimulationState) ->
         let ly = if snapshot.ly <= 0.0 { 1.0 } else { snapshot.ly };
 
         for p in 0..particle_count {
-            // 世界坐标转归一化 [0,1]
-            let nx_p = (snapshot.x[p] / lx).clamp(0.0, 1.0);
-            let ny_p = (snapshot.y[p] / ly).clamp(0.0, 1.0);
+            // 世界坐标转归一化 [0,1]，偏移 0.5 像素对齐热力图像素中心
+            let nx_p = (((snapshot.x[p] / lx) * nx as f64 + 0.5) / nx as f64).clamp(0.0, 1.0);
+            let ny_p = (((snapshot.y[p] / ly) * ny as f64 + 0.5) / ny as f64).clamp(0.0, 1.0);
 
             // 映射到屏幕坐标（热力图区域）
             let sx = texture_rect.left() + nx_p as f32 * texture_rect.width();
@@ -298,6 +298,8 @@ fn render_simulation_panels(ctx: &egui::Context, state: &mut SimulationState) ->
             sim,
             interaction,
             texture_rect,
+            nx,
+            ny,
             lx,
             ly,
         );
@@ -320,6 +322,8 @@ fn handle_mouse_interaction(
     sim: &mut ElectrostaticSim2D,
     interaction: &mut InteractionState,
     texture_rect: egui::Rect,
+    grid_nx: usize,
+    grid_ny: usize,
     lx: f64,
     ly: f64,
 ) {
@@ -336,26 +340,35 @@ fn handle_mouse_interaction(
     }
 
     // 归一化鼠标位置到 [0,1]（纹理坐标系）
-    // nx: left=0.0, right=1.0
-    // ny: top=1.0, bottom=0.0（对应纹理坐标 Y 轴向上）
-    let nx = ((pos.x - texture_rect.left()) / texture_rect.width()).clamp(0.0, 1.0);
-    let ny = ((texture_rect.bottom() - pos.y) / texture_rect.height()).clamp(0.0, 1.0);
+    // tex_u: left=0.0, right=1.0
+    // tex_v: top=1.0, bottom=0.0（对应纹理坐标 Y 轴向上）
+    let tex_u = ((pos.x - texture_rect.left()) / texture_rect.width()).clamp(0.0f32, 1.0f32);
+    let tex_v = ((texture_rect.bottom() - pos.y) / texture_rect.height()).clamp(0.0f32, 1.0f32);
 
-    // 转换到世界坐标
-    let world_x = nx as f64 * lx;
-    let world_y = ny as f64 * ly;
+    // 鼠标在热力图像素中心的视觉坐标 → 逆变换回世界坐标
+    // 与粒子渲染的 ((x/lx * nx + 0.5) / nx) 互为逆运算
+    let inv_nx = grid_nx as f64;
+    let inv_ny = grid_ny as f64;
+    let tex_u_f64 = tex_u as f64;
+    let tex_v_f64 = tex_v as f64;
+    let world_x = ((tex_u_f64 * inv_nx - 0.5) / inv_nx).clamp(0.0, 1.0) * lx;
+    let world_y = ((tex_v_f64 * inv_ny - 0.5) / inv_ny).clamp(0.0, 1.0) * ly;
 
     if mouse_down {
         if !interaction.dragging {
-            // 尝试选择最近的粒子
-            let norm_x: Vec<f64> = sim.particles.x.iter().map(|&x| x / lx).collect();
-            let norm_y: Vec<f64> = sim.particles.y.iter().map(|&y| y / ly).collect();
+            // 尝试选择最近的粒子（在视觉坐标空间中比较，即带半像素偏移的归一化坐标）
+            let particle_visual_u: Vec<f64> = sim.particles.x.iter()
+                .map(|&x| (((x / lx) * inv_nx + 0.5) / inv_nx).clamp(0.0, 1.0))
+                .collect();
+            let particle_visual_v: Vec<f64> = sim.particles.y.iter()
+                .map(|&y| (((y / ly) * inv_ny + 0.5) / inv_ny).clamp(0.0, 1.0))
+                .collect();
 
             let mut min_dist = f64::MAX;
             let mut min_index = None;
             for i in 0..sim.particles.len() {
-                let dx = norm_x[i] - nx as f64;
-                let dy = norm_y[i] - ny as f64;
+                let dx = particle_visual_u[i] - tex_u as f64;
+                let dy = particle_visual_v[i] - tex_v as f64;
                 let dist = (dx * dx + dy * dy).sqrt();
                 if dist < min_dist {
                     min_dist = dist;
