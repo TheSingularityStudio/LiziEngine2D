@@ -4,14 +4,16 @@ pub enum ToolMode {
     DragParticle,   // 拖动粒子
     PlaceParticle,  // 放置粒子
     DeleteParticle, // 删除粒子
+    Inspect,        // 查看（缩放、平移、显示信息）
 }
 
 impl ToolMode {
-    pub fn all() -> [ToolMode; 3] {
+    pub fn all() -> [ToolMode; 4] {
         [
             ToolMode::DragParticle,
             ToolMode::PlaceParticle,
             ToolMode::DeleteParticle,
+            ToolMode::Inspect,
         ]
     }
 
@@ -20,6 +22,7 @@ impl ToolMode {
             ToolMode::DragParticle => "拖动",
             ToolMode::PlaceParticle => "放置",
             ToolMode::DeleteParticle => "删除",
+            ToolMode::Inspect => "查看",
         }
     }
 
@@ -28,6 +31,7 @@ impl ToolMode {
             ToolMode::DragParticle => "\u{1F5B1}",  // 🖱
             ToolMode::PlaceParticle => "+",
             ToolMode::DeleteParticle => "-",
+            ToolMode::Inspect => "\u{1F50D}", // 🔍
         }
     }
 }
@@ -116,6 +120,18 @@ impl Default for PlacementList {
     }
 }
 
+/// 悬停粒子信息
+#[derive(Debug, Clone)]
+pub struct HoveredParticleInfo {
+    pub index: usize,
+    pub x: f64,
+    pub y: f64,
+    pub vx: f64,
+    pub vy: f64,
+    pub q: f64,
+    pub m: f64,
+}
+
 /// 交互状态
 #[derive(Debug, Clone)]
 pub struct InteractionState {
@@ -131,6 +147,16 @@ pub struct InteractionState {
     pub dragged_particle_index: Option<usize>,
     /// 选择粒子的半径（归一化坐标）
     pub selection_radius: f64,
+    /// 查看工具：画布平移偏移量 (dx, dy)
+    pub view_offset: (f32, f32),
+    /// 查看工具：缩放倍率
+    pub zoom: f32,
+    /// 查看工具：是否正在平移画布
+    pub panning: bool,
+    /// 查看工具：上次鼠标位置（用于拖拽平移）
+    pub last_pan_pos: Option<(f32, f32)>,
+    /// 查看工具：悬停的粒子信息
+    pub hovered_particle: Option<HoveredParticleInfo>,
 }
 
 impl Default for InteractionState {
@@ -142,6 +168,11 @@ impl Default for InteractionState {
             dragging: false,
             dragged_particle_index: None,
             selection_radius: 0.05, // 默认选择半径为窗口尺寸的 5%
+            view_offset: (0.0, 0.0),
+            zoom: 1.0,
+            panning: false,
+            last_pan_pos: None,
+            hovered_particle: None,
         }
     }
 }
@@ -149,6 +180,12 @@ impl Default for InteractionState {
 impl InteractionState {
     pub fn new() -> Self {
         Self::default()
+    }
+
+    /// 重置查看工具的视图
+    pub fn reset_view(&mut self) {
+        self.view_offset = (0.0, 0.0);
+        self.zoom = 1.0;
     }
 
     /// 根据放置清单生成所有粒子的坐标偏移量（相对于点击点）
