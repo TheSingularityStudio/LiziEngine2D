@@ -43,15 +43,15 @@ pub fn run(nx: usize, ny: usize, dx: f64, dy: f64, n: usize, _steps: usize, dt: 
     let mut step_count = 0usize;
     loop {
         // 1. 处理鼠标交互（直接修改 sim.particles，即时生效）
-        let is_dragging = interaction.handle_mouse(
+        let _is_dragging = interaction.handle_mouse(
             renderer.window(),
             renderer.width(),
             renderer.height(),
             &mut sim,
         );
 
-        // 2. 只在未暂停且未拖动时执行模拟步骤
-        if !renderer.is_paused() && !is_dragging {
+        // 2. 只在未暂停时执行模拟步骤
+        if !renderer.is_paused() {
             sim.step(dt);
             step_count += 1;
         }
