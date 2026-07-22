@@ -1,6 +1,7 @@
 pub mod core;
 pub mod visual;
-pub mod demo;
+pub mod presets;
+pub mod gui;
 
 // 重新导出 core 模块，保持外部 API 兼容
 pub use core::grid;

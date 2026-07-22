@@ -8,16 +8,24 @@ use lizi_engine_2d::core::grid::Grid2D;
 use lizi_engine_2d::core::particles::ParticleState;
 use lizi_engine_2d::core::sim::ElectrostaticSim2D;
 use lizi_engine_2d::core::interp::gather_field_to_particles_bilinear;
+use lizi_engine_2d::gui::LiziApp;
 
 #[derive(Parser)]
 #[command(name = "lizi2d", about = "2D Electrostatic PIC Simulator")]
 struct Cli {
     #[command(subcommand)]
-    command: Command,
+    command: Option<Command>,
 }
 
 #[derive(Subcommand)]
 enum Command {
+    /// 启动 GUI 窗口（默认模式）
+    Gui {
+        #[arg(long, default_value = "800")]
+        width: u32,
+        #[arg(long, default_value = "700")]
+        height: u32,
+    },
     /// 单电荷方向一致性验证
     ValidateSingleCharge {
         #[arg(long, default_value = "64")]
@@ -69,76 +77,17 @@ enum Command {
         #[arg(long, default_value = "0")]
         seed: u64,
     },
-    /// 可视化 Demo
-    Demo {
-        #[command(subcommand)]
-        demo_cmd: DemoCommand,
-    },
-}
-
-#[derive(Subcommand)]
-enum DemoCommand {
-    /// 单点电荷可视化（minifb 窗口）
-    SingleCharge {
-        #[arg(long, default_value = "64")]
-        nx: usize,
-        #[arg(long, default_value = "64")]
-        ny: usize,
-        #[arg(long, default_value = "1.0")]
-        dx: f64,
-        #[arg(long, default_value = "1.0")]
-        dy: f64,
-        #[arg(long)]
-        charge_x: Option<f64>,
-        #[arg(long)]
-        charge_y: Option<f64>,
-        #[arg(long, default_value = "1e-12")]
-        eps: f64,
-    },
-    /// 双电荷可视化（minifb 窗口）
-    TwoCharges {
-        #[arg(long, default_value = "64")]
-        nx: usize,
-        #[arg(long, default_value = "64")]
-        ny: usize,
-        #[arg(long, default_value = "1.0")]
-        dx: f64,
-        #[arg(long, default_value = "1.0")]
-        dy: f64,
-        #[arg(long, default_value = "1e-12")]
-        eps: f64,
-        /// 是否使用异号电荷（默认同号）
-        #[arg(long, default_value = "false")]
-        opposite_sign: bool,
-    },
-    /// 随机粒子模拟动画（minifb 窗口）
-    RandomParticles {
-        #[arg(long, default_value = "64")]
-        nx: usize,
-        #[arg(long, default_value = "64")]
-        ny: usize,
-        #[arg(long, default_value = "1.0")]
-        dx: f64,
-        #[arg(long, default_value = "1.0")]
-        dy: f64,
-        #[arg(long, default_value = "200")]
-        n: usize,
-        #[arg(long, default_value = "200")]
-        steps: usize,
-        #[arg(long, default_value = "0.05")]
-        dt: f64,
-        #[arg(long, default_value = "1e-12")]
-        eps: f64,
-        #[arg(long, default_value = "0")]
-        seed: u64,
-    },
 }
 
 fn main() {
     let cli = Cli::parse();
 
     match cli.command {
-        Command::ValidateSingleCharge {
+        None | Some(Command::Gui { .. }) => {
+            // 默认启动 GUI
+            LiziApp::run();
+        }
+        Some(Command::ValidateSingleCharge {
             nx,
             ny,
             dx,
@@ -146,15 +95,15 @@ fn main() {
             charge_x,
             charge_y,
             eps,
-        } => validate_single_charge(nx, ny, dx, dy, charge_x, charge_y, eps),
-        Command::ValidateTwoCharges {
+        }) => validate_single_charge(nx, ny, dx, dy, charge_x, charge_y, eps),
+        Some(Command::ValidateTwoCharges {
             nx,
             ny,
             dx,
             dy,
             eps,
-        } => validate_two_charges(nx, ny, dx, dy, eps),
-        Command::ValidateRandom {
+        }) => validate_two_charges(nx, ny, dx, dy, eps),
+        Some(Command::ValidateRandom {
             nx,
             ny,
             dx,
@@ -164,37 +113,7 @@ fn main() {
             dt,
             eps,
             seed,
-        } => validate_random(nx, ny, dx, dy, n, steps, dt, eps, seed),
-        Command::Demo { demo_cmd } => match demo_cmd {
-            DemoCommand::SingleCharge {
-                nx,
-                ny,
-                dx,
-                dy,
-                charge_x,
-                charge_y,
-                eps,
-            } => lizi_engine_2d::demo::single_charge::run(nx, ny, dx, dy, charge_x, charge_y, eps),
-            DemoCommand::TwoCharges {
-                nx,
-                ny,
-                dx,
-                dy,
-                eps,
-                opposite_sign,
-            } => lizi_engine_2d::demo::two_charges::run(nx, ny, dx, dy, eps, opposite_sign),
-            DemoCommand::RandomParticles {
-                nx,
-                ny,
-                dx,
-                dy,
-                n,
-                steps,
-                dt,
-                eps,
-                seed,
-            } => lizi_engine_2d::demo::random_particles::run(nx, ny, dx, dy, n, steps, dt, eps, seed),
-        },
+        }) => validate_random(nx, ny, dx, dy, n, steps, dt, eps, seed),
     }
 }
 
