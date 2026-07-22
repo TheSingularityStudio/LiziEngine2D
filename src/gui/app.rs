@@ -2,6 +2,7 @@ use std::cell::Cell;
 use std::sync::Arc;
 use eframe::egui;
 use egui::ColorImage;
+use egui::TextureHandle;
 use egui::load::SizedTexture;
 
 use crate::gui::interaction::InteractionState;
@@ -51,6 +52,8 @@ struct SimulationState {
     v_max: f64,
     /// 交互状态
     interaction: InteractionState,
+    /// 缓存的纹理句柄（避免每帧重新创建）
+    heatmap_texture: Option<TextureHandle>,
 }
 
 /// LiziEngine2D 主 GUI 应用
@@ -120,6 +123,7 @@ impl LiziApp {
                                     v_min: 0.0,
                                     v_max: 1.0,
                                     interaction: InteractionState::new(),
+                                    heatmap_texture: None,
                                 });
                             }
                             ui.add_space(10.0);
@@ -231,7 +235,7 @@ fn render_simulation_panels(ctx: &egui::Context, state: &mut SimulationState) ->
             *v_max = *v_min + 1.0;
         }
 
-        // 渲染热力图
+        // 构建像素数据
         let mut pixels = Vec::with_capacity(nx * ny);
         for j in (0..ny).rev() {
             for i in 0..nx {
@@ -245,11 +249,13 @@ fn render_simulation_panels(ctx: &egui::Context, state: &mut SimulationState) ->
             size: [nx, ny],
             pixels,
         };
-        let texture = ctx.load_texture(
-            "heatmap",
-            color_image,
-            egui::TextureOptions::NEAREST,
-        );
+
+        // 复用缓存的纹理句柄，避免每帧创建新纹理
+        let texture = state.heatmap_texture.get_or_insert_with(|| {
+            ctx.load_texture("heatmap", color_image.clone(), egui::TextureOptions::NEAREST)
+        });
+        // 更新纹理内容（只更新像素数据，不重新分配 GPU 对象）
+        texture.set(color_image, egui::TextureOptions::NEAREST);
 
         // 居中放置正方形图像区域
         let avail = ui.available_rect_before_wrap();
@@ -260,7 +266,7 @@ fn render_simulation_panels(ctx: &egui::Context, state: &mut SimulationState) ->
         // 绘制热力图并记录实际渲染区域
         let response = ui.put(
             image_rect,
-            egui::Image::from_texture(SizedTexture::from(&texture))
+            egui::Image::from_texture(SizedTexture::from(&*texture))
                 .fit_to_exact_size(egui::vec2(max_edge, max_edge)),
         );
         let texture_rect = response.rect;

@@ -113,29 +113,15 @@ pub fn compute_e_from_potential_periodic(
     dx: f64,
     dy: f64,
 ) -> (Array2<f64>, Array2<f64>) {
-    let (nx, ny) = v.dim();
-
     // E_x: -(V(i+1,j) - V(i-1,j)) / (2dx)
     let vx_p = shift_array2(v, Axis(0), 1isize);
     let vx_m = shift_array2(v, Axis(0), -1isize);
-
-    let mut ex = Array2::zeros((nx, ny));
-    for i in 0..nx {
-        for j in 0..ny {
-            ex[[i, j]] = -(vx_p[[i, j]] - vx_m[[i, j]]) / (2.0 * dx);
-        }
-    }
+    let ex = -(vx_p - vx_m) / (2.0 * dx);
 
     // E_y: -(V(i,j+1) - V(i,j-1)) / (2dy)
     let vy_p = shift_array2(v, Axis(1), 1isize);
     let vy_m = shift_array2(v, Axis(1), -1isize);
-
-    let mut ey = Array2::zeros((nx, ny));
-    for i in 0..nx {
-        for j in 0..ny {
-            ey[[i, j]] = -(vy_p[[i, j]] - vy_m[[i, j]]) / (2.0 * dy);
-        }
-    }
+    let ey = -(vy_p - vy_m) / (2.0 * dy);
 
     (ex, ey)
 }
