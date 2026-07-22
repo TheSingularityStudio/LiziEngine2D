@@ -356,6 +356,54 @@ fn render_right_panel(ctx: &egui::Context, state: &mut SimulationState) {
                             }
                             if ui.button("- 清空清单").clicked() { interaction.placement_list.entries.clear(); }
                         });
+                        // 导入/导出按钮
+                        ui.horizontal(|ui| {
+                            if ui.button("📥 导入清单").clicked() {
+                                if let Some(path) = rfd::FileDialog::new()
+                                    .add_filter("放置清单", &["json"])
+                                    .pick_file()
+                                {
+                                    match std::fs::read_to_string(path.clone()) {
+                                        Ok(content) => {
+                                            match interaction.placement_list.import_json(&content) {
+                                                Ok(()) => {
+                                                    state.message_dialog = Some(format!("✅ 成功导入清单\n路径: {}", path.display()));
+                                                }
+                                                Err(e) => {
+                                                    state.message_dialog = Some(format!("❌ 导入失败\n{}", e));
+                                                }
+                                            }
+                                        }
+                                        Err(e) => {
+                                            state.message_dialog = Some(format!("❌ 读取文件失败\n{}", e));
+                                        }
+                                    }
+                                }
+                            }
+                            if ui.button("📤 导出清单").clicked() {
+                                if let Some(path) = rfd::FileDialog::new()
+                                    .add_filter("放置清单", &["json"])
+                                    .set_file_name("placement_list.json")
+                                    .save_file()
+                                {
+                                    match interaction.placement_list.export_json() {
+                                        Ok(content) => {
+                                            match std::fs::write(&path, &content) {
+                                                Ok(()) => {
+                                                    state.message_dialog = Some(format!("✅ 成功导出清单\n路径: {}", path.display()));
+                                                }
+                                                Err(e) => {
+                                                    state.message_dialog = Some(format!("❌ 写入文件失败\n{}", e));
+                                                }
+                                            }
+                                        }
+                                        Err(e) => {
+                                            state.message_dialog = Some(format!("❌ 导出失败\n{}", e));
+                                        }
+                                    }
+                                }
+                            }
+                        });
                         ui.add_space(4.0); ui.separator(); ui.add_space(4.0);
                         ui.label(format!("清单中共 {} 个粒子", interaction.placement_list.entries.len()));
                         ui.label("点击画布放置所有粒子。");

@@ -26,6 +26,7 @@ pub struct PresetConfig {
 /// 预设变体枚举
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum PresetVariant {
+    EmptyScene,
     SingleCharge,
     TwoChargesSame,
     TwoChargesOpposite,
@@ -36,6 +37,7 @@ impl PresetVariant {
     /// 获取所有预设变体列表
     pub fn all() -> &'static [PresetVariant] {
         &[
+            PresetVariant::EmptyScene,
             PresetVariant::SingleCharge,
             PresetVariant::TwoChargesSame,
             PresetVariant::TwoChargesOpposite,
@@ -46,6 +48,7 @@ impl PresetVariant {
     /// 获取预设的显示名称
     pub fn display_name(&self) -> &'static str {
         match self {
+            PresetVariant::EmptyScene => "空白场景",
             PresetVariant::SingleCharge => "单点电荷",
             PresetVariant::TwoChargesSame => "双电荷（同号）",
             PresetVariant::TwoChargesOpposite => "双电荷（异号）",
@@ -56,6 +59,9 @@ impl PresetVariant {
     /// 获取预设的详细描述
     pub fn description(&self) -> &'static str {
         match self {
+            PresetVariant::EmptyScene => {
+                "完全空白的场景，无任何粒子，适合自行添加粒子进行实验。"
+            }
             PresetVariant::SingleCharge => {
                 "在网格中央放置一个单位正电荷，显示静电场 V 热力图。"
             }
@@ -74,6 +80,21 @@ impl PresetVariant {
     /// 获取预设的完整配置
     pub fn config(&self) -> PresetConfig {
         match self {
+            PresetVariant::EmptyScene => PresetConfig {
+                name: "空白场景",
+                description: "完全空白的场景，无任何粒子，适合自行添加粒子进行实验。",
+                nx: 64,
+                ny: 64,
+                dx: 1.0,
+                dy: 1.0,
+                eps: 1e-12,
+                dt: 0.05,
+                seed: Some(0),
+                boundary_type: BoundaryType::Periodic,
+                max_speed: Some(10.0),
+                compute_fields_immediately: false,
+                particle_count: 0,
+            },
             PresetVariant::SingleCharge => PresetConfig {
                 name: "单点电荷",
                 description: "在网格中央放置一个单位正电荷，显示静电场 V 热力图。",
@@ -140,6 +161,9 @@ impl PresetVariant {
     /// 根据预设配置构建粒子状态
     pub fn build_particles(&self, grid: &Grid2D) -> ParticleState {
         match self {
+            PresetVariant::EmptyScene => {
+                ParticleState::zeros(0, Some(0))
+            }
             PresetVariant::SingleCharge => {
                 let mut particles = ParticleState::zeros(1, Some(0));
                 particles.x[0] = 0.5 * grid.lx();

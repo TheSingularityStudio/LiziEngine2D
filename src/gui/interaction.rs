@@ -1,3 +1,5 @@
+use serde::{Deserialize, Serialize};
+
 /// 工具模式
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum ToolMode {
@@ -55,7 +57,7 @@ impl Default for PlaceParticleParams {
 }
 
 /// 放置清单中的单个条目
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PlacementEntry {
     pub charge: f64,
     pub mass: f64,
@@ -73,7 +75,7 @@ impl Default for PlacementEntry {
 }
 
 /// 粒子排列方式
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 pub enum ArrangeMode {
     Stack,      // 堆叠（所有粒子在同一位置）
     Horizontal, // 水平排列
@@ -97,6 +99,14 @@ impl ArrangeMode {
 }
 
 /// 放置清单：可配置多种不同的粒子，点击时一次性放置
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PlacementListData {
+    pub entries: Vec<PlacementEntry>,
+    pub spacing: f64,
+    pub arrange_mode: ArrangeMode,
+}
+
+/// 放置清单：可配置多种不同的粒子，点击时一次性放置
 #[derive(Debug, Clone)]
 pub struct PlacementList {
     /// 是否启用放置清单（否则使用快速放置）
@@ -117,6 +127,29 @@ impl Default for PlacementList {
             spacing: 0.03,
             arrange_mode: ArrangeMode::Horizontal,
         }
+    }
+}
+
+impl PlacementList {
+    /// 导出为 JSON 字符串
+    pub fn export_json(&self) -> Result<String, String> {
+        let data = PlacementListData {
+            entries: self.entries.clone(),
+            spacing: self.spacing,
+            arrange_mode: self.arrange_mode,
+        };
+        serde_json::to_string_pretty(&data)
+            .map_err(|e| format!("序列化失败: {}", e))
+    }
+
+    /// 从 JSON 字符串导入
+    pub fn import_json(&mut self, json_str: &str) -> Result<(), String> {
+        let data: PlacementListData = serde_json::from_str(json_str)
+            .map_err(|e| format!("反序列化失败: {}", e))?;
+        self.entries = data.entries;
+        self.spacing = data.spacing;
+        self.arrange_mode = data.arrange_mode;
+        Ok(())
     }
 }
 
