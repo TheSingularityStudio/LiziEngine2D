@@ -1,0 +1,122 @@
+use ndarray::Array2;
+use ndarray::Array3;
+use crate::grid::Grid2D;
+use crate::particles::ParticleState;
+use crate::scatter::scatter_unit_charges_to_grid;
+use crate::poisson_fft::{solve_poisson_via_discrete_greens_function_kernel, compute_e_from_potential_periodic};
+use crate::interp::gather_field_to_particles_bilinear;
+use crate::integrator::step_half_implicit_euler;
+
+/// 2D 静电（电场-粒子）CPU 模拟器（PIC 风格实现；单位电荷、单位质量）
+///
+/// 每个时间步的计算流程：
+///   1) 将粒子散射到网格上，得到离散电荷密度 rho
+///   2) 在周期边界条件下求解 Poisson：通过 FFT 求得电势 V
+///   3) 在网格上计算电场：E = -∇V
+///   4) 将网格电场通过 gather 插值回粒子位置，得到粒子受力（由于 q=1，故 F = E）
+///   5) 使用半隐式欧拉对粒子积分更新（速度/位置）
+#[derive(Debug)]
+pub struct ElectrostaticSim2D {
+    pub grid: Grid2D,
+    pub particles: ParticleState,
+    pub eps_poisson: f64,
+    pub rho: Option<Array2<f64>>,
+    pub v: Option<Array2<f64>>,
+    pub ex: Option<Array2<f64>>,
+    pub ey: Option<Array2<f64>>,
+}
+
+impl ElectrostaticSim2D {
+    pub fn new(grid: Grid2D, particles: ParticleState, eps_poisson: f64) -> Self {
+        Self {
+            grid,
+            particles,
+            eps_poisson,
+            rho: None,
+            v: None,
+            ex: None,
+            ey: None,
+        }
+    }
+
+    /// 计算当前粒子状态下的全场：rho → V → Ex, Ey，并将电场 gather 到粒子
+    pub fn compute_fields(&mut self) {
+        let rho = scatter_unit_charges_to_grid(&self.grid, &self.particles);
+        let v = solve_poisson_via_discrete_greens_function_kernel(
+            &rho,
+            self.grid.dx,
+            self.grid.dy,
+            self.eps_poisson,
+        );
+        let (ex, ey) = compute_e_from_potential_periodic(&v, self.grid.dx, self.grid.dy);
+
+        // gather 电场到粒子受力
+        let (fx, fy) = gather_field_to_particles_bilinear(
+            &self.grid,
+            &self.particles,
+            &ex,
+            &ey,
+        );
+        self.particles.fx = fx;
+        self.particles.fy = fy;
+
+        self.rho = Some(rho);
+        self.v = Some(v);
+        self.ex = Some(ex);
+        self.ey = Some(ey);
+    }
+
+    /// 执行一个时间步：计算场 + 积分
+    pub fn step(&mut self, dt: f64) {
+        self.compute_fields();
+        step_half_implicit_euler(&self.grid, &mut self.particles, dt);
+    }
+
+    /// 运行指定步数的模拟，按 record_every 间隔记录粒子位置快照
+    ///
+    /// 返回：positions, shape = (frames, N, 2)
+    pub fn run(&mut self, dt: f64, steps: usize, record_every: usize) -> Array3<f64> {
+        let n = self.particles.len();
+        let num_frames = steps / record_every + if steps % record_every > 0 { 1 } else { 0 };
+        let mut frames = Array3::zeros((num_frames, n, 2));
+        let mut frame_idx = 0;
+
+        for s in 0..steps {
+            self.step(dt);
+            if s % record_every == 0 {
+                for p in 0..n {
+                    frames[[frame_idx, p, 0]] = self.particles.x[p];
+                    frames[[frame_idx, p, 1]] = self.particles.y[p];
+                }
+                frame_idx += 1;
+            }
+        }
+
+        frames
+    }
+
+    /// 获取当前仿真状态快照（用于可视化/调试）
+    pub fn get_state_snapshot(&mut self) -> StateSnapshot {
+        if self.v.is_none() || self.ex.is_none() || self.ey.is_none() {
+            self.compute_fields();
+        }
+
+        StateSnapshot {
+            x: self.particles.x.clone(),
+            y: self.particles.y.clone(),
+            v: self.v.as_ref().unwrap().clone(),
+            ex: self.ex.as_ref().unwrap().clone(),
+            ey: self.ey.as_ref().unwrap().clone(),
+        }
+    }
+}
+
+/// 仿真状态快照
+#[derive(Debug, Clone)]
+pub struct StateSnapshot {
+    pub x: ndarray::Array1<f64>,
+    pub y: ndarray::Array1<f64>,
+    pub v: Array2<f64>,
+    pub ex: Array2<f64>,
+    pub ey: Array2<f64>,
+}
