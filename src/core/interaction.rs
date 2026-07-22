@@ -1,6 +1,5 @@
-/// 交互模块：处理鼠标与粒子的交互
-///
-/// 提供鼠标拖动粒子的功能
+use minifb::{Window, MouseButton};
+use crate::core::sim::ElectrostaticSim2D;
 
 /// 交互状态
 #[derive(Debug, Clone)]
@@ -9,9 +8,6 @@ pub struct InteractionState {
     pub dragging: bool,
     /// 当前拖动的粒子索引（如果有）
     pub dragged_particle_index: Option<usize>,
-    /// 鼠标在归一化坐标系中的位置 [0, 1]
-    pub mouse_x: f64,
-    pub mouse_y: f64,
     /// 选择粒子的半径（归一化坐标）
     pub selection_radius: f64,
 }
@@ -21,71 +17,84 @@ impl Default for InteractionState {
         Self {
             dragging: false,
             dragged_particle_index: None,
-            mouse_x: 0.0,
-            mouse_y: 0.0,
             selection_radius: 0.05, // 默认选择半径为窗口尺寸的 5%
         }
     }
 }
 
 impl InteractionState {
-    /// 创建新的交互状态
     pub fn new() -> Self {
         Self::default()
     }
 
-    /// 更新鼠标位置（归一化坐标）
-    pub fn update_mouse_position(&mut self, x: f64, y: f64) {
-        self.mouse_x = x;
-        self.mouse_y = y;
-    }
+    /// 处理鼠标交互，直接修改 sim 中的粒子位置
+    ///
+    /// 返回 true 表示有粒子被拖动中
+    pub fn handle_mouse(
+        &mut self,
+        window: &Window,
+        width: usize,
+        height: usize,
+        sim: &mut ElectrostaticSim2D,
+    ) -> bool {
+        // 获取鼠标位置（像素坐标）
+        let (mouse_px, mouse_py) = match window.get_mouse_pos(minifb::MouseMode::Clamp) {
+            Some((x, y)) => (x as f64, y as f64),
+            None => return self.dragging,
+        };
 
-    /// 查找距离鼠标最近的粒子索引
-    /// 
-    /// 返回距离鼠标最近的粒子索引和距离（如果在选择半径内）
-    pub fn find_nearest_particle(
-        &self,
-        particle_x: &[f64],
-        particle_y: &[f64],
-    ) -> Option<(usize, f64)> {
-        let mut min_dist = f64::MAX;
-        let mut min_index = None;
+        // 转换为归一化坐标 [0, 1]
+        let mouse_nx = mouse_px / width as f64;
+        let mouse_ny = mouse_py / height as f64;
 
-        for i in 0..particle_x.len() {
-            let dx = particle_x[i] - self.mouse_x;
-            let dy = particle_y[i] - self.mouse_y;
-            let dist = (dx * dx + dy * dy).sqrt();
-            if dist < min_dist {
-                min_dist = dist;
-                min_index = Some(i);
+        // 转换为世界坐标
+        let lx = sim.grid.lx();
+        let ly = sim.grid.ly();
+        let lx = if lx <= 0.0 { 1.0 } else { lx };
+        let ly = if ly <= 0.0 { 1.0 } else { ly };
+        let mouse_world_x = mouse_nx * lx;
+        let mouse_world_y = mouse_ny * ly;
+
+        // 处理鼠标左键
+        if window.get_mouse_down(MouseButton::Left) {
+            if !self.dragging {
+                // 尝试选择粒子：粒子坐标归一化后比较
+                let norm_x: Vec<f64> = sim.particles.x.iter().map(|&x| x / lx).collect();
+                let norm_y: Vec<f64> = sim.particles.y.iter().map(|&y| y / ly).collect();
+
+                let mut min_dist = f64::MAX;
+                let mut min_index = None;
+                for i in 0..sim.particles.len() {
+                    let dx = norm_x[i] - mouse_nx;
+                    let dy = norm_y[i] - mouse_ny;
+                    let dist = (dx * dx + dy * dy).sqrt();
+                    if dist < min_dist {
+                        min_dist = dist;
+                        min_index = Some(i);
+                    }
+                }
+                if let Some(idx) = min_index {
+                    if min_dist <= self.selection_radius {
+                        self.dragging = true;
+                        self.dragged_particle_index = Some(idx);
+                    }
+                }
             }
+
+            // 如果正在拖动，直接修改 sim 的粒子位置和速度
+            if let Some(idx) = self.dragged_particle_index {
+                sim.particles.x[idx] = mouse_world_x;
+                sim.particles.y[idx] = mouse_world_y;
+                sim.particles.vx[idx] = 0.0;
+                sim.particles.vy[idx] = 0.0;
+                return true;
+            }
+        } else {
+            // 鼠标释放
+            self.dragging = false;
+            self.dragged_particle_index = None;
         }
 
-        match min_index {
-            Some(idx) if min_dist <= self.selection_radius => Some((idx, min_dist)),
-            _ => None,
-        }
-    }
-
-    /// 开始拖动粒子
-    pub fn start_drag(&mut self, particle_index: usize) {
-        self.dragging = true;
-        self.dragged_particle_index = Some(particle_index);
-    }
-
-    /// 停止拖动
-    pub fn stop_drag(&mut self) {
-        self.dragging = false;
-        self.dragged_particle_index = None;
-    }
-
-    /// 获取当前拖动的粒子索引
-    pub fn dragged_particle(&self) -> Option<usize> {
-        self.dragged_particle_index
-    }
-
-    /// 检查是否在拖动
-    pub fn is_dragging(&self) -> bool {
         self.dragging
     }
 }

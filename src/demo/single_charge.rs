@@ -2,7 +2,6 @@ use crate::core::grid::Grid2D;
 use crate::core::particles::ParticleState;
 use crate::core::sim::ElectrostaticSim2D;
 use crate::visual::minifb_renderer::MinifbRenderer;
-use crate::visual::window::VisualWindow;
 
 /// Demo：单点电荷可视化
 ///
@@ -36,7 +35,7 @@ pub fn run(nx: usize, ny: usize, dx: f64, dy: f64, charge_x: Option<f64>, charge
 
     let mut frame_count = 0usize;
     loop {
-        if !renderer.update(&snapshot) {
+        if !renderer.render(&snapshot) {
             println!("Demo window closed at frame {}.", frame_count);
             return;
         }

@@ -82,7 +82,7 @@ impl EguiApp {
 }
 
 impl VisualWindow for EguiApp {
-    fn update(&mut self, snapshot: &StateSnapshot) -> bool {
+    fn render(&mut self, snapshot: &StateSnapshot) -> bool {
         // 更新快照
         if let Ok(mut snap) = self.snapshot.lock() {
             *snap = Some(snapshot.clone());
@@ -94,7 +94,7 @@ impl VisualWindow for EguiApp {
         }
 
         // 如果暂停且未请求步进，保持
-        if *self.paused.lock().unwrap() && !self.is_step_requested() {
+        if self.is_paused() && !self.is_step_requested() {
             std::thread::sleep(std::time::Duration::from_millis(16));
         }
 
@@ -103,6 +103,10 @@ impl VisualWindow for EguiApp {
 
     fn should_close(&self) -> bool {
         *self.should_close.lock().unwrap()
+    }
+
+    fn is_paused(&self) -> bool {
+        *self.paused.lock().unwrap()
     }
 }
 
