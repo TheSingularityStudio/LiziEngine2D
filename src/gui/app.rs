@@ -7,6 +7,7 @@ use egui::menu;
 
 use crate::gui::interaction::{InteractionState, ToolMode};
 use crate::core::sim::ElectrostaticSim2D;
+use crate::core::boundary::BoundaryType;
 use crate::presets::PresetVariant;
 use crate::visual::colors::heatmap_rgb;
 
@@ -454,6 +455,21 @@ fn render_right_panel(ctx: &egui::Context, state: &mut SimulationState) {
                 } else {
                     ui.label("▶ 运行中");
                 }
+
+                ui.add_space(16.0);
+                ui.separator();
+                ui.add_space(8.0);
+
+                // 边界类型选择
+                ui.label("边界类型：");
+                for bt in BoundaryType::all() {
+                    ui.radio_value(&mut state.sim.boundary_type, bt, bt.display_name());
+                }
+                ui.label(match state.sim.boundary_type {
+                    BoundaryType::Periodic => "粒子从一边穿出，从另一边进入",
+                    BoundaryType::Reflective => "粒子撞到边界后反弹",
+                    BoundaryType::Open => "粒子移出边界即被删除",
+                });
             });
         });
 }

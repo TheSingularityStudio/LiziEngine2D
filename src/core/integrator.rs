@@ -8,15 +8,13 @@ use crate::core::particles::ParticleState;
 ///
 /// 由于 q=1、m=1，加速度 a = F
 ///
-/// 返回：更新后的 particles（位置做周期包裹）
+/// 注意：边界处理由调用方（`apply_boundary_conditions`）根据边界类型执行，
+/// 此处不做任何边界包裹，允许粒子自由移动。
 pub fn step_half_implicit_euler(
-    grid: &Grid2D,
+    _grid: &Grid2D,
     particles: &mut ParticleState,
     dt: f64,
 ) {
-    let lx = grid.lx();
-    let ly = grid.ly();
-
     for p in 0..particles.len() {
         // v += a * dt (a = F 因为 q=1, m=1)
         particles.vx[p] += particles.fx[p] * dt;
@@ -25,9 +23,6 @@ pub fn step_half_implicit_euler(
         // x += v * dt
         particles.x[p] += particles.vx[p] * dt;
         particles.y[p] += particles.vy[p] * dt;
-
-        // 周期包裹
-        particles.x[p] = ((particles.x[p] % lx) + lx) % lx;
-        particles.y[p] = ((particles.y[p] % ly) + ly) % ly;
+        // 边界处理由调用方的 apply_boundary_conditions 完成
     }
 }
