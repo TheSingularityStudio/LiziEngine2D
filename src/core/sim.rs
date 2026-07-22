@@ -6,6 +6,7 @@ use crate::core::scatter::scatter_unit_charges_to_grid;
 use crate::core::poisson_fft::{solve_poisson_via_discrete_greens_function_kernel, compute_e_from_potential_periodic};
 use crate::core::interp::gather_field_to_particles_bilinear;
 use crate::core::integrator::step_half_implicit_euler;
+use crate::core::boundary::{BoundaryType, apply_boundary_conditions, apply_speed_limit};
 
 /// 2D 静电（电场-粒子）CPU 模拟器（PIC 风格实现；单位电荷、单位质量）
 ///
@@ -24,9 +25,14 @@ pub struct ElectrostaticSim2D {
     pub v: Option<Array2<f64>>,
     pub ex: Option<Array2<f64>>,
     pub ey: Option<Array2<f64>>,
+    /// 边界类型（周期或反弹）
+    pub boundary_type: BoundaryType,
+    /// 最高速度限制（None 表示无限制）
+    pub max_speed: Option<f64>,
 }
 
 impl ElectrostaticSim2D {
+    /// 创建新的模拟器实例（使用默认配置：周期边界，最高速度10.0）
     pub fn new(grid: Grid2D, particles: ParticleState, eps_poisson: f64) -> Self {
         Self {
             grid,
@@ -36,6 +42,29 @@ impl ElectrostaticSim2D {
             v: None,
             ex: None,
             ey: None,
+            boundary_type: BoundaryType::Periodic,
+            max_speed: Some(10.0),
+        }
+    }
+
+    /// 创建自定义配置的模拟器实例
+    pub fn with_config(
+        grid: Grid2D,
+        particles: ParticleState,
+        eps_poisson: f64,
+        boundary_type: BoundaryType,
+        max_speed: Option<f64>,
+    ) -> Self {
+        Self {
+            grid,
+            particles,
+            eps_poisson,
+            rho: None,
+            v: None,
+            ex: None,
+            ey: None,
+            boundary_type,
+            max_speed,
         }
     }
 
@@ -66,10 +95,18 @@ impl ElectrostaticSim2D {
         self.ey = Some(ey);
     }
 
-    /// 执行一个时间步：计算场 + 积分
+    /// 执行一个时间步：计算场 + 积分 + 边界处理 + 速度限制
     pub fn step(&mut self, dt: f64) {
         self.compute_fields();
         step_half_implicit_euler(&self.grid, &mut self.particles, dt);
+        
+        // 应用边界条件
+        apply_boundary_conditions(&mut self.particles, &self.grid, self.boundary_type);
+        
+        // 应用最高速度限制
+        if let Some(max_speed) = self.max_speed {
+            apply_speed_limit(&mut self.particles, max_speed);
+        }
     }
 
     /// 运行指定步数的模拟，按 record_every 间隔记录粒子位置快照
@@ -95,6 +132,17 @@ impl ElectrostaticSim2D {
         frames
     }
 
+    /// 更新单个粒子的位置
+    pub fn set_particle_position(&mut self, index: usize, x: f64, y: f64) {
+        if index < self.particles.x.len() {
+            self.particles.x[index] = x;
+            self.particles.y[index] = y;
+            // 重置速度
+            self.particles.vx[index] = 0.0;
+            self.particles.vy[index] = 0.0;
+        }
+    }
+
     /// 获取当前仿真状态快照（用于可视化/调试）
     pub fn get_state_snapshot(&mut self) -> StateSnapshot {
         if self.v.is_none() || self.ex.is_none() || self.ey.is_none() {
@@ -109,6 +157,8 @@ impl ElectrostaticSim2D {
             v: self.v.as_ref().unwrap().clone(),
             ex: self.ex.as_ref().unwrap().clone(),
             ey: self.ey.as_ref().unwrap().clone(),
+            lx: self.grid.lx(),
+            ly: self.grid.ly(),
         }
     }
 }
@@ -123,4 +173,7 @@ pub struct StateSnapshot {
     pub v: Array2<f64>,
     pub ex: Array2<f64>,
     pub ey: Array2<f64>,
+    /// 世界坐标范围（用于渲染归一化）
+    pub lx: f64,
+    pub ly: f64,
 }

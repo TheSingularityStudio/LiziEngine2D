@@ -5,7 +5,8 @@ use rand::Rng;
 use crate::core::grid::Grid2D;
 use crate::core::particles::ParticleState;
 use crate::core::sim::ElectrostaticSim2D;
-use crate::visual::{MinifbRenderer, VisualWindow};
+use crate::visual::minifb_renderer::MinifbRenderer;
+use crate::visual::window::VisualWindow;
 
 /// Demo：随机粒子模拟动画
 ///
@@ -39,7 +40,13 @@ pub fn run(nx: usize, ny: usize, dx: f64, dy: f64, n: usize, _steps: usize, dt: 
 
     let mut step_count = 0usize;
     loop {
-        sim.step(dt);
+        // 获取待处理的粒子位置更新（在调用 update 之前）
+        // 注意：我们需要先获取更新，然后应用到模拟器，再生成新的快照
+        
+        // 只在未暂停时执行模拟步骤
+        if !renderer.is_paused() {
+            sim.step(dt);
+        }
 
         let snapshot = sim.get_state_snapshot();
         if !renderer.update(&snapshot) {
@@ -47,6 +54,12 @@ pub fn run(nx: usize, ny: usize, dx: f64, dy: f64, n: usize, _steps: usize, dt: 
             return;
         }
 
+        // 处理拖动事件：获取待处理的粒子位置更新并应用到模拟器
+        let updates = renderer.get_pending_particle_updates();
+        for (idx, x, y) in updates {
+            sim.set_particle_position(idx, x, y);
+        }
+        
         step_count += 1;
         std::thread::sleep(std::time::Duration::from_millis(16));
     }

@@ -5,6 +5,14 @@ use crate::core::interaction::InteractionState;
 use crate::visual::colors::{heatmap_rgb, pack_rgb};
 use crate::visual::window::VisualWindow;
 
+/// 交互事件：表示用户拖动粒子完成后的信息
+#[derive(Debug, Clone)]
+pub struct InteractionEvent {
+    pub particle_index: usize,
+    pub x: f64,
+    pub y: f64,
+}
+
 /// 基于 minifb 的轻量窗口渲染器
 ///
 /// 将仿真状态（V 热力图 + 粒子叠加）渲染到窗口中。
@@ -19,6 +27,8 @@ pub struct MinifbRenderer {
     v_max: f64,
     /// 交互状态
     interaction: InteractionState,
+    /// 待处理的粒子位置更新（用于持久化拖动结果）
+    pending_updates: Vec<(usize, f64, f64)>,
 }
 
 impl MinifbRenderer {
@@ -54,6 +64,7 @@ impl MinifbRenderer {
             v_min: 0.0,
             v_max: 1.0,
             interaction: InteractionState::new(),
+            pending_updates: Vec::new(),
         }
     }
 
@@ -107,32 +118,47 @@ impl MinifbRenderer {
         let mouse_nx = mouse_px / self.width as f64;
         let mouse_ny = mouse_py / self.height as f64;
 
-        // 更新交互状态的鼠标位置
+        // 更新交互状态的鼠标位置（归一化坐标）
         self.interaction.update_mouse_position(mouse_nx, mouse_ny);
+
+        // 将归一化鼠标坐标转换为世界坐标
+        let lx = snapshot.lx;
+        let ly = snapshot.ly;
+        let lx = if lx <= 0.0 { 1.0 } else { lx };
+        let ly = if ly <= 0.0 { 1.0 } else { ly };
+        let mouse_world_x = mouse_nx * lx;
+        let mouse_world_y = mouse_ny * ly;
 
         // 处理鼠标左键
         if self.window.get_mouse_down(MouseButton::Left) {
             if !self.interaction.is_dragging() {
-                // 尝试选择粒子
+                // 尝试选择粒子（使用归一化坐标比较）
+                // 需要将粒子世界坐标转换为归一化坐标进行比较
+                let norm_x: Vec<f64> = snapshot.x.iter().map(|&x| x / lx).collect();
+                let norm_y: Vec<f64> = snapshot.y.iter().map(|&y| y / ly).collect();
                 if let Some((idx, _dist)) = self.interaction.find_nearest_particle(
-                    snapshot.x.as_slice().unwrap(),
-                    snapshot.y.as_slice().unwrap(),
+                    &norm_x,
+                    &norm_y,
                 ) {
                     self.interaction.start_drag(idx);
                 }
             }
 
-            // 如果正在拖动，更新粒子位置
+            // 如果正在拖动，更新粒子位置（使用世界坐标）
             if let Some(idx) = self.interaction.dragged_particle() {
-                snapshot.x[idx] = mouse_nx;
-                snapshot.y[idx] = mouse_ny;
+                snapshot.x[idx] = mouse_world_x;
+                snapshot.y[idx] = mouse_world_y;
                 // 重置被拖动粒子的速度
                 snapshot.vx[idx] = 0.0;
                 snapshot.vy[idx] = 0.0;
             }
         } else {
-            // 鼠标释放，停止拖动
+            // 鼠标释放，停止拖动，并记录位置更新
             if self.interaction.is_dragging() {
+                if let Some(idx) = self.interaction.dragged_particle() {
+                    // 记录最终位置到待处理更新列表
+                    self.pending_updates.push((idx, snapshot.x[idx], snapshot.y[idx]));
+                }
                 self.interaction.stop_drag();
             }
         }
@@ -143,13 +169,22 @@ impl MinifbRenderer {
         &mut self,
         x: &ndarray::Array1<f64>,
         y: &ndarray::Array1<f64>,
+        lx: f64,
+        ly: f64,
     ) {
         let dot_radius: isize = 2;
         let dragged_idx = self.interaction.dragged_particle();
 
+        // 防止除以零
+        let lx = if lx <= 0.0 { 1.0 } else { lx };
+        let ly = if ly <= 0.0 { 1.0 } else { ly };
+
         for p in 0..x.len() {
-            let px = ((x[p] * self.width as f64) as usize).min(self.width - 1);
-            let py = ((y[p] * self.height as f64) as usize).min(self.height - 1);
+            // 将世界坐标归一化到 [0, 1]，然后转换为像素坐标
+            let nx = x[p] / lx;
+            let ny = y[p] / ly;
+            let px = ((nx * self.width as f64) as usize).min(self.width - 1);
+            let py = ((ny * self.height as f64) as usize).min(self.height - 1);
 
             // 选择颜色：被拖动的粒子为黄色，其他为白色
             let dot_color = if dragged_idx == Some(p) {
@@ -178,6 +213,38 @@ impl MinifbRenderer {
     }
 }
 
+impl MinifbRenderer {
+    /// 获取当前暂停状态
+    pub fn is_paused(&self) -> bool {
+        self.paused
+    }
+
+    /// 获取当前正在拖动的粒子索引
+    pub fn dragged_particle_index(&self) -> Option<usize> {
+        self.interaction.dragged_particle()
+    }
+
+    /// 检查是否正在拖动粒子
+    pub fn is_dragging(&self) -> bool {
+        self.interaction.is_dragging()
+    }
+
+    /// 获取拖动粒子的新位置（如果正在拖动）
+    /// 返回 (粒子索引, 新x, 新y)
+    pub fn get_drag_position(&self, snapshot: &StateSnapshot) -> Option<(usize, f64, f64)> {
+        if let Some(idx) = self.interaction.dragged_particle() {
+            return Some((idx, snapshot.x[idx], snapshot.y[idx]));
+        }
+        None
+    }
+
+    /// 获取并清除待处理的粒子位置更新
+    /// 返回需要更新的粒子位置和速度信息
+    pub fn get_pending_particle_updates(&mut self) -> Vec<(usize, f64, f64)> {
+        std::mem::take(&mut self.pending_updates)
+    }
+}
+
 impl VisualWindow for MinifbRenderer {
     fn update(&mut self, snapshot: &StateSnapshot) -> bool {
         // 处理键盘输入
@@ -195,15 +262,25 @@ impl VisualWindow for MinifbRenderer {
             // 渲染 V 热力图
             self.render_heatmap(&mutable_snapshot.v);
 
-            // 处理鼠标交互（可能在暂停时也允许拖动）
+            // 处理鼠标交互
             self.handle_mouse_interaction(&mut mutable_snapshot);
 
             // 叠加粒子（使用高亮渲染）
-            self.render_particles_with_highlight(&mutable_snapshot.x, &mutable_snapshot.y);
+            self.render_particles_with_highlight(
+                &mutable_snapshot.x,
+                &mutable_snapshot.y,
+                mutable_snapshot.lx,
+                mutable_snapshot.ly,
+            );
         } else {
             // 暂停时也允许拖动粒子
             self.handle_mouse_interaction(&mut mutable_snapshot);
-            self.render_particles_with_highlight(&mutable_snapshot.x, &mutable_snapshot.y);
+            self.render_particles_with_highlight(
+                &mutable_snapshot.x,
+                &mutable_snapshot.y,
+                mutable_snapshot.lx,
+                mutable_snapshot.ly,
+            );
         }
 
         // 更新窗口

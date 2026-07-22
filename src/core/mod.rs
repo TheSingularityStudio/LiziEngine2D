@@ -1,3 +1,4 @@
+pub mod boundary;
 pub mod grid;
 pub mod particles;
 pub mod scatter;
