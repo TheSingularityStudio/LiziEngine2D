@@ -5,7 +5,7 @@ use egui::TextureHandle;
 use egui::load::SizedTexture;
 use egui::menu;
 
-use crate::gui::interaction::{InteractionState, ToolMode};
+use crate::gui::interaction::{InteractionState, ToolMode, ArrangeMode};
 use crate::core::sim::ElectrostaticSim2D;
 use crate::core::boundary::BoundaryType;
 use crate::core::lz2d;
@@ -474,28 +474,112 @@ fn render_right_panel(ctx: &egui::Context, state: &mut SimulationState) {
                             .step_by(0.005));
                     }
                     ToolMode::PlaceParticle => {
-                        ui.label("放置粒子参数：");
+                        // 是否使用放置清单
+                        let list_enabled = &mut interaction.placement_list.enabled;
+                        ui.checkbox(list_enabled, "使用放置清单");
                         ui.add_space(4.0);
 
-                        // 电荷量
-                        ui.horizontal(|ui| {
-                            ui.set_min_width(60.0);
-                            ui.label("电荷量：");
-                        });
-                        ui.add(egui::Slider::new(&mut interaction.place_params.charge, -10.0..=10.0)
-                            .text("q")
-                            .step_by(0.1));
+                        if *list_enabled {
+                            // ---- 放置清单模式 ----
+                            ui.separator();
+                            ui.add_space(4.0);
+                            ui.label("放置清单（点击画布一次性放置所有粒子）：");
+                            ui.add_space(4.0);
 
-                        // 固定粒子选项
-                        ui.add_space(4.0);
-                        ui.checkbox(&mut interaction.place_params.fixed, "固定粒子（速度=0）");
+                            // 排列方式
+                            ui.horizontal(|ui| {
+                                ui.label("排列方式：");
+                                ui.add_space(4.0);
+                                for mode in ArrangeMode::all() {
+                                    ui.radio_value(&mut interaction.placement_list.arrange_mode, mode, mode.display_name());
+                                }
+                            });
 
-                        ui.add_space(8.0);
-                        ui.separator();
-                        ui.add_space(4.0);
-                        ui.label("在画布上点击放置粒子。");
-                        if interaction.place_params.fixed {
-                            ui.label("固定粒子不会移动。");
+                            // 间距
+                            ui.horizontal(|ui| {
+                                ui.set_min_width(60.0);
+                                ui.label("间距：");
+                            });
+                            ui.add(egui::Slider::new(&mut interaction.placement_list.spacing, 0.005..=0.20)
+                                .text("归一化")
+                                .step_by(0.005));
+
+                            ui.add_space(6.0);
+                            ui.separator();
+                            ui.add_space(4.0);
+
+                            // 清单条目列表
+                            let mut remove_idx: Option<usize> = None;
+                            for (i, entry) in interaction.placement_list.entries.iter_mut().enumerate() {
+                                ui.group(|ui| {
+                                    ui.horizontal(|ui| {
+                                        ui.label(format!("#{}", i + 1));
+                                        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                                            if ui.button("❌").clicked() {
+                                                remove_idx = Some(i);
+                                            }
+                                        });
+                                    });
+                                    ui.horizontal(|ui| {
+                                        ui.label("电荷量：");
+                                        ui.add(
+                                            egui::Slider::new(&mut entry.charge, -10.0..=10.0)
+                                                .text("q")
+                                                .step_by(0.1)
+                                        );
+                                    });
+                                    ui.checkbox(&mut entry.fixed, "固定（速度=0）");
+                                });
+                                ui.add_space(4.0);
+                            }
+
+                            // 删除条目（必须在迭代外执行）
+                            if let Some(idx) = remove_idx {
+                                interaction.placement_list.entries.remove(idx);
+                            }
+
+                            // 添加/清空按钮
+                            ui.horizontal(|ui| {
+                                if ui.button("+ 添加粒子").clicked() {
+                                    interaction.placement_list.entries.push(
+                                        crate::gui::interaction::PlacementEntry::default()
+                                    );
+                                }
+                                if ui.button("- 清空清单").clicked() {
+                                    interaction.placement_list.entries.clear();
+                                }
+                            });
+
+                            ui.add_space(4.0);
+                            ui.separator();
+                            ui.add_space(4.0);
+                            ui.label(format!("清单中共 {} 个粒子", interaction.placement_list.entries.len()));
+                            ui.label("点击画布放置所有粒子。");
+                        } else {
+                            // ---- 快速放置模式（原有单粒子参数） ----
+                            ui.label("快速放置参数：");
+                            ui.add_space(4.0);
+
+                            // 电荷量
+                            ui.horizontal(|ui| {
+                                ui.set_min_width(60.0);
+                                ui.label("电荷量：");
+                            });
+                            ui.add(egui::Slider::new(&mut interaction.place_params.charge, -10.0..=10.0)
+                                .text("q")
+                                .step_by(0.1));
+
+                            // 固定粒子选项
+                            ui.add_space(4.0);
+                            ui.checkbox(&mut interaction.place_params.fixed, "固定粒子（速度=0）");
+
+                            ui.add_space(8.0);
+                            ui.separator();
+                            ui.add_space(4.0);
+                            ui.label("在画布上点击放置粒子。");
+                            if interaction.place_params.fixed {
+                                ui.label("固定粒子不会移动。");
+                            }
                         }
                     }
                     ToolMode::DeleteParticle => {
@@ -792,12 +876,33 @@ fn handle_mouse_interaction(
         }
         ToolMode::PlaceParticle => {
             if mouse_clicked {
-                let charge = interaction.place_params.charge;
-                sim.particles.add_particle(world_x, world_y, charge, 0.0, 0.0);
-                sim.v = None;
-                sim.ex = None;
-                sim.ey = None;
-                ui.ctx().request_repaint();
+                if interaction.placement_list.enabled && !interaction.placement_list.entries.is_empty() {
+                    // 放置清单模式：一次性放置所有条目
+                    let offsets = interaction.compute_placement_offsets();
+                    for (i, entry) in interaction.placement_list.entries.iter().enumerate() {
+                        let (dx, dy) = offsets.get(i).copied().unwrap_or((0.0, 0.0));
+                        let px = (world_x + dx).clamp(0.0, lx);
+                        let py = (world_y + dy).clamp(0.0, ly);
+                        let vx = if entry.fixed { 0.0 } else { 0.0 };
+                        let vy = if entry.fixed { 0.0 } else { 0.0 };
+                        sim.particles.add_particle(px, py, entry.charge, vx, vy);
+                    }
+                    sim.v = None;
+                    sim.ex = None;
+                    sim.ey = None;
+                    ui.ctx().request_repaint();
+                } else {
+                    // 快速放置模式：放置单个粒子
+                    let charge = interaction.place_params.charge;
+                    let fixed = interaction.place_params.fixed;
+                    let vx = if fixed { 0.0 } else { 0.0 };
+                    let vy = if fixed { 0.0 } else { 0.0 };
+                    sim.particles.add_particle(world_x, world_y, charge, vx, vy);
+                    sim.v = None;
+                    sim.ex = None;
+                    sim.ey = None;
+                    ui.ctx().request_repaint();
+                }
             }
         }
         ToolMode::DeleteParticle => {
