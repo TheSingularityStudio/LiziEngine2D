@@ -14,41 +14,70 @@ pub fn heatmap_rgb(value: f64, min: f64, max: f64) -> (u8, u8, u8) {
     (r, g, b)
 }
 
-// 简化 viridis colormap 近似
+// 改进的 viridis colormap 近似（8 段分段线性，减少连接点颜色跳变）
 fn viridis_r(t: f64) -> u8 {
-    if t < 0.25 {
-        (68.0 + t * 4.0 * (253.0 - 68.0)) as u8
-    } else if t < 0.5 {
-        (253.0 - (t - 0.25) * 4.0 * 200.0) as u8
-    } else if t < 0.75 {
-        (53.0 + (t - 0.5) * 4.0 * 100.0) as u8
-    } else {
-        (153.0 + (t - 0.75) * 4.0 * 100.0) as u8
-    }
+    // 基于 viridis 关键节点插值，8 段均匀分段
+    let nodes = [
+        (0.000, 68.0),
+        (0.125, 68.0),
+        (0.250, 218.0),
+        (0.375, 253.0),
+        (0.500, 253.0),
+        (0.625, 155.0),
+        (0.750, 53.0),
+        (0.875, 103.0),
+        (1.000, 253.0),
+    ];
+    interpolate_color(t, &nodes)
 }
 
 fn viridis_g(t: f64) -> u8 {
-    if t < 0.25 {
-        (1.0 + t * 4.0 * 140.0) as u8
-    } else if t < 0.5 {
-        (141.0 + (t - 0.25) * 4.0 * 60.0) as u8
-    } else if t < 0.75 {
-        (201.0 - (t - 0.5) * 4.0 * 60.0) as u8
-    } else {
-        (141.0 - (t - 0.75) * 4.0 * 141.0) as u8
-    }
+    let nodes = [
+        (0.000, 1.0),
+        (0.125, 28.0),
+        (0.250, 96.0),
+        (0.375, 141.0),
+        (0.500, 174.0),
+        (0.625, 201.0),
+        (0.750, 201.0),
+        (0.875, 121.0),
+        (1.000, 0.0),
+    ];
+    interpolate_color(t, &nodes)
 }
 
 fn viridis_b(t: f64) -> u8 {
-    if t < 0.25 {
-        (84.0 - t * 4.0 * 50.0) as u8
-    } else if t < 0.5 {
-        (34.0 + (t - 0.25) * 4.0 * 120.0) as u8
-    } else if t < 0.75 {
-        (154.0 + (t - 0.5) * 4.0 * 80.0) as u8
-    } else {
-        (234.0 - (t - 0.75) * 4.0 * 234.0) as u8
+    let nodes = [
+        (0.000, 84.0),
+        (0.125, 64.0),
+        (0.250, 34.0),
+        (0.375, 34.0),
+        (0.500, 77.0),
+        (0.625, 127.0),
+        (0.750, 154.0),
+        (0.875, 177.0),
+        (1.000, 0.0),
+    ];
+    interpolate_color(t, &nodes)
+}
+
+/// 在分段节点之间进行线性插值
+fn interpolate_color(t: f64, nodes: &[(f64, f64)]) -> u8 {
+    if t <= nodes[0].0 {
+        return nodes[0].1 as u8;
     }
+    if t >= nodes.last().unwrap().0 {
+        return nodes.last().unwrap().1 as u8;
+    }
+    for i in 0..nodes.len() - 1 {
+        let (t0, v0) = nodes[i];
+        let (t1, v1) = nodes[i + 1];
+        if t >= t0 && t < t1 {
+            let frac = (t - t0) / (t1 - t0);
+            return (v0 + frac * (v1 - v0)) as u8;
+        }
+    }
+    nodes.last().unwrap().1 as u8
 }
 
 /// 将 u32 RGB 打包为 0x00RRGGBB 格式

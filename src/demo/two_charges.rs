@@ -1,79 +1,72 @@
 use crate::core::grid::Grid2D;
 use crate::core::particles::ParticleState;
 use crate::core::sim::ElectrostaticSim2D;
-use crate::visual::{MinifbRenderer, VisualWindow};
+use crate::core::interaction::InteractionState;
+use crate::visual::minifb_renderer::MinifbRenderer;
 
-/// Demo：双电荷叠加可视化
+/// Demo：双电荷叠加可视化（动态交互版）
 ///
-/// 在网格左半部和右半部各放置一个单位电荷，显示叠加 V 热力图和粒子位置。
-/// 使用 minifb 轻量窗口渲染。
+/// 在网格上放置两个电荷，显示叠加 V 热力图和粒子位置。
+/// 交互逻辑直接操作 sim.particles，无延迟。
+/// 支持 ESC 退出、Space 暂停/继续、鼠标拖动粒子。
 pub fn run(nx: usize, ny: usize, dx: f64, dy: f64, eps: f64, opposite_sign: bool) {
     let grid = Grid2D::new(nx, ny, dx, dy);
     let lx = grid.lx();
     let ly = grid.ly();
-
-    // 使用两个正电荷，通过 scatter 叠加
-    let mut particles_pos = ParticleState::zeros(1, Some(0));
-    particles_pos.x[0] = 0.25 * lx;
-    particles_pos.y[0] = 0.5 * ly;
-
-    let mut particles_neg = ParticleState::zeros(1, Some(0));
-    particles_neg.x[0] = 0.75 * lx;
-    particles_neg.y[0] = 0.5 * ly;
-
-    let mut sim1 = ElectrostaticSim2D::new(grid.clone(), particles_pos, eps);
-    sim1.compute_fields();
-    let snap1 = sim1.get_state_snapshot();
-
-    let mut sim2 = ElectrostaticSim2D::new(grid.clone(), particles_neg, eps);
-    sim2.compute_fields();
-    let snap2 = sim2.get_state_snapshot();
-
-    // 叠加两个快照 - 使用 owned Array2 避免临时值问题
-    let neg_v = -&snap2.v;
-    let neg_ex = -&snap2.ex;
-    let neg_ey = -&snap2.ey;
-
-    let combined_v = if opposite_sign {
-        &snap1.v + &neg_v
+    
+    // 创建两个粒子的模拟器
+    let charges = if opposite_sign {
+        vec![1.0, -1.0]
     } else {
-        &snap1.v + &snap2.v
+        vec![1.0, 1.0]
     };
-    let combined_ex = if opposite_sign {
-        &snap1.ex + &neg_ex
-    } else {
-        &snap1.ex + &snap2.ex
-    };
-    let combined_ey = if opposite_sign {
-        &snap1.ey + &neg_ey
-    } else {
-        &snap1.ey + &snap2.ey
-    };
-
-    let combined_x_data: Vec<f64> = snap1.x.iter().chain(snap2.x.iter()).copied().collect();
-    let combined_y_data: Vec<f64> = snap1.y.iter().chain(snap2.y.iter()).copied().collect();
-
-    let combined_snapshot = crate::core::sim::StateSnapshot {
-        x: ndarray::Array1::from_vec(combined_x_data),
-        y: ndarray::Array1::from_vec(combined_y_data),
-        v: combined_v,
-        ex: combined_ex,
-        ey: combined_ey,
-    };
-
+    let mut particles = ParticleState::with_charges(2, Some(0), &charges);
+    particles.x[0] = 0.25 * lx;
+    particles.y[0] = 0.5 * ly;
+    particles.x[1] = 0.75 * lx;
+    particles.y[1] = 0.5 * ly;
+    
+    let mut sim = ElectrostaticSim2D::new(grid, particles, eps);
+    
     let title = if opposite_sign {
         "LiziEngine2D - Two Charges (Opposite Sign) Demo"
     } else {
         "LiziEngine2D - Two Charges (Same Sign) Demo"
     };
-
+    
     let mut renderer = MinifbRenderer::new(title, 512, 512);
+    let mut interaction = InteractionState::new();
+    
+    println!("Two Charges Demo started. Press ESC to close, Space to pause/resume.");
+    println!("You can drag particles with the mouse.");
+    if opposite_sign {
+        println!("First particle: +1, Second particle: -1");
+    }
+    
+    let dt = 0.05;
+    
+    loop {
+        // 1. 处理鼠标交互（直接修改 sim.particles，即时生效）
+        let is_dragging = interaction.handle_mouse(
+            renderer.window(),
+            renderer.width(),
+            renderer.height(),
+            &mut sim,
+        );
 
-    println!("Two Charges Demo started. Press ESC to close.");
+        // 2. 只在未暂停且未拖动时执行模拟步骤
+        //    拖动时跳过 step()，防止 step() 重置粒子位置
+        if !renderer.is_paused() && !is_dragging {
+            sim.step(dt);
+        }
 
-    while renderer.update(&combined_snapshot) {
+        // 3. 获取快照并渲染
+        let snapshot = sim.get_state_snapshot();
+        if !renderer.render(&snapshot) {
+            println!("Demo window closed.");
+            return;
+        }
+        
         std::thread::sleep(std::time::Duration::from_millis(16));
     }
-
-    println!("Demo window closed.");
 }

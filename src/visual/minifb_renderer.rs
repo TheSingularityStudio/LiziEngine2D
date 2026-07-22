@@ -2,12 +2,12 @@ use minifb::{Key, Window, WindowOptions, Scale, ScaleMode};
 use ndarray::Array2;
 use crate::core::sim::StateSnapshot;
 use crate::visual::colors::{heatmap_rgb, pack_rgb};
-use crate::visual::window::VisualWindow;
 
 /// 基于 minifb 的轻量窗口渲染器
 ///
 /// 将仿真状态（V 热力图 + 粒子叠加）渲染到窗口中。
 /// 支持 ESC 退出、Space 暂停/继续。
+/// **不处理鼠标交互**——交互由主循环直接操作 sim。
 pub struct MinifbRenderer {
     window: Window,
     buffer: Vec<u32>,
@@ -88,18 +88,28 @@ impl MinifbRenderer {
         }
     }
 
-    /// 在帧缓冲上绘制粒子位置（白色圆点）
-    fn render_particles(&mut self, x: &ndarray::Array1<f64>, y: &ndarray::Array1<f64>) {
-        // 假设粒子坐标在 [0, 1] 内，映射到像素
+    /// 渲染粒子
+    fn render_particles(&mut self, snapshot: &StateSnapshot) {
         let dot_radius: isize = 2;
-        let dot_color = 0x00FFFFFFu32; // 白色
+        let lx = if snapshot.lx <= 0.0 { 1.0 } else { snapshot.lx };
+        let ly = if snapshot.ly <= 0.0 { 1.0 } else { snapshot.ly };
 
-        for p in 0..x.len() {
-            let px = ((x[p] * self.width as f64) as usize).min(self.width - 1);
-            let py = ((y[p] * self.height as f64) as usize).min(self.height - 1);
+        for p in 0..snapshot.x.len() {
+            // 将世界坐标归一化到 [0, 1]，然后转换为像素坐标
+            let nx = snapshot.x[p] / lx;
+            let ny = snapshot.y[p] / ly;
+            let px = ((nx * self.width as f64) as usize).min(self.width - 1);
+            let py = ((ny * self.height as f64) as usize).min(self.height - 1);
 
-            for dy in -dot_radius..=dot_radius {
-                for dx in -dot_radius..=dot_radius {
+            // 根据电荷量选择颜色
+            let dot_color = if snapshot.q[p] < 0.0 {
+                0x0000FFFFu32 // 负电荷：青色
+            } else {
+                0x00FFFFFFu32 // 正电荷：白色
+            };
+
+            for dy in -(dot_radius)..=dot_radius {
+                for dx in -(dot_radius)..=dot_radius {
                     if dx * dx + dy * dy <= dot_radius * dot_radius {
                         let sx = (px as isize + dx).max(0).min(self.width as isize - 1) as usize;
                         let sy = (py as isize + dy).max(0).min(self.height as isize - 1) as usize;
@@ -109,10 +119,30 @@ impl MinifbRenderer {
             }
         }
     }
-}
 
-impl VisualWindow for MinifbRenderer {
-    fn update(&mut self, snapshot: &StateSnapshot) -> bool {
+    /// 获取窗口引用（用于交互）
+    pub fn window(&self) -> &Window {
+        &self.window
+    }
+
+    /// 获取窗口宽度
+    pub fn width(&self) -> usize {
+        self.width
+    }
+
+    /// 获取窗口高度
+    pub fn height(&self) -> usize {
+        self.height
+    }
+
+    /// 获取是否暂停
+    pub fn is_paused(&self) -> bool {
+        self.paused
+    }
+
+    /// 渲染一帧：绘制热力图 + 粒子，更新窗口
+    /// 返回 true 表示继续运行，false 表示用户关闭了窗口
+    pub fn render(&mut self, snapshot: &StateSnapshot) -> bool {
         // 处理键盘输入
         if self.window.is_key_down(Key::Escape) {
             return false;
@@ -121,13 +151,11 @@ impl VisualWindow for MinifbRenderer {
             self.paused = !self.paused;
         }
 
-        if !self.paused {
-            // 渲染 V 热力图
-            self.render_heatmap(&snapshot.v);
+        // 渲染 V 热力图
+        self.render_heatmap(&snapshot.v);
 
-            // 叠加粒子
-            self.render_particles(&snapshot.x, &snapshot.y);
-        }
+        // 叠加粒子
+        self.render_particles(snapshot);
 
         // 更新窗口
         self.window
@@ -137,7 +165,8 @@ impl VisualWindow for MinifbRenderer {
         self.window.is_open()
     }
 
-    fn should_close(&self) -> bool {
+    /// 窗口是否已关闭
+    pub fn should_close(&self) -> bool {
         !self.window.is_open()
     }
 }

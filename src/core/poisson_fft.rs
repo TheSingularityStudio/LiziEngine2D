@@ -116,7 +116,7 @@ pub fn compute_e_from_potential_periodic(
 }
 
 /// 在指定轴上滚动数组（类似 np.roll）
-fn shift_array2(arr: &Array2<f64>, axis: Axis, shift: isize) -> Array2<f64> {
+pub fn shift_array2(arr: &Array2<f64>, axis: Axis, shift: isize) -> Array2<f64> {
     let dim = arr.dim();
     let mut result = Array2::zeros(dim);
 
@@ -145,4 +145,86 @@ fn shift_array2(arr: &Array2<f64>, axis: Axis, shift: isize) -> Array2<f64> {
     }
 
     result
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_shift_array2_axis0() {
+        // arr shape (3,2): rows=[0: [1,2], 1: [3,4], 2: [5,6]]
+        let arr = Array2::from_shape_vec((3, 2), vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0]).unwrap();
+        // Shift rows down by 1: row 0 ← row 1, row 1 ← row 2, row 2 ← row 0
+        let shifted = shift_array2(&arr, Axis(0), 1);
+        assert!((shifted[[0, 0]] - 3.0).abs() < 1e-10);
+        assert!((shifted[[0, 1]] - 4.0).abs() < 1e-10);
+        assert!((shifted[[1, 0]] - 5.0).abs() < 1e-10);
+        assert!((shifted[[1, 1]] - 6.0).abs() < 1e-10);
+        assert!((shifted[[2, 0]] - 1.0).abs() < 1e-10);
+        assert!((shifted[[2, 1]] - 2.0).abs() < 1e-10);
+    }
+
+    #[test]
+    fn test_shift_array2_axis1() {
+        // arr shape (2,3): [[1,2,3], [4,5,6]]
+        let arr = Array2::from_shape_vec((2, 3), vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0]).unwrap();
+        // Shift columns right by 1: col 0 ← col 1, col 1 ← col 2, col 2 ← col 0
+        let shifted = shift_array2(&arr, Axis(1), 1);
+        assert!((shifted[[0, 0]] - 2.0).abs() < 1e-10);
+        assert!((shifted[[0, 1]] - 3.0).abs() < 1e-10);
+        assert!((shifted[[0, 2]] - 1.0).abs() < 1e-10);
+        assert!((shifted[[1, 0]] - 5.0).abs() < 1e-10);
+        assert!((shifted[[1, 1]] - 6.0).abs() < 1e-10);
+        assert!((shifted[[1, 2]] - 4.0).abs() < 1e-10);
+    }
+
+    #[test]
+    fn test_poisson_solver_uniform_rho_zero_laplacian() {
+        // Uniform charge density should produce zero potential (k=0 mode)
+        let rho = Array2::from_elem((8, 8), 1.0);
+        let v = solve_poisson_via_discrete_greens_function_kernel(&rho, 1.0, 1.0, 1e-12);
+        // Potential should be all zeros (k=0 mode removed)
+        for val in v.iter() {
+            assert!(val.abs() < 1e-10, "Uniform rho should give V=0, got {}", val);
+        }
+    }
+
+    #[test]
+    fn test_poisson_solver_point_charge() {
+        // Single point charge at center
+        let nx = 16;
+        let ny = 16;
+        let dx = 1.0;
+        let dy = 1.0;
+        let mut rho = Array2::zeros((nx, ny));
+        rho[[8, 8]] = 1.0 / (dx * dy); // charge density per unit area
+        
+        let v = solve_poisson_via_discrete_greens_function_kernel(&rho, dx, dy, 1e-12);
+        
+        // Potential should be symmetric and positive at the charge location
+        assert!(v[[8, 8]] > 0.0, "V at charge should be positive");
+        // Potential should be lower further away
+        assert!(v[[8, 8]] > v[[4, 4]], "V should decay with distance");
+    }
+
+    #[test]
+    fn test_electric_field_from_poisson_dipole() {
+        let nx = 16;
+        let ny = 16;
+        let dx = 1.0;
+        let dy = 1.0;
+        let mut rho = Array2::zeros((nx, ny));
+        rho[[6, 8]] = 1.0 / (dx * dy);   // positive charge
+        rho[[10, 8]] = -1.0 / (dx * dy); // negative charge
+
+        let v = solve_poisson_via_discrete_greens_function_kernel(&rho, dx, dy, 1e-12);
+        let (ex, ey) = compute_e_from_potential_periodic(&v, dx, dy);
+
+        // Field should point from positive to negative charge, roughly along +x axis
+        // At a point between them: (8, 8)
+        assert!(ex[[8, 8]] > 0.0, "E_x should point from + to - charge");
+        // E_y at the same y should be approximately zero (symmetry)
+        assert!(ey[[8, 8]].abs() < 1.0, "E_y should be small along symmetry axis");
+    }
 }

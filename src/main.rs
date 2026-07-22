@@ -226,8 +226,8 @@ fn validate_single_charge(
     let mut sim = ElectrostaticSim2D::new(grid.clone(), particles, eps);
     sim.compute_fields();
 
-    let ex = sim.ex.as_ref().unwrap();
-    let ey = sim.ey.as_ref().unwrap();
+    let ex = sim.ex.as_ref().expect("ex should be set by compute_fields");
+    let ey = sim.ey.as_ref().expect("ey should be set by compute_fields");
 
     let cx = sim.particles.x[0] / grid.dx;
     let cy = sim.particles.y[0] / grid.dy;
@@ -298,7 +298,8 @@ fn validate_single_charge(
 
 fn periodic_delta(a: f64, b: f64, period: f64) -> f64 {
     let d = a - b;
-    ((d + 0.5 * period) % period + period) % period - 0.5 * period
+    // 使用 rem_euclid 确保结果非负
+    ((d + 0.5 * period).rem_euclid(period)) - 0.5 * period
 }
 
 /// ==================== 验证脚本 2：两电荷叠加 ====================
@@ -334,7 +335,8 @@ fn compute_e_for_charges(
         }
         let mut sim = ElectrostaticSim2D::new(grid.clone(), p, eps);
         sim.compute_fields();
-        (sim.ex.unwrap(), sim.ey.unwrap())
+        // compute_fields 确保 ex/ey 被填充，用 expect 提供有意义的错误信息
+        (sim.ex.expect("ex should be set by compute_fields"), sim.ey.expect("ey should be set by compute_fields"))
     }
 
     let (ex_pos, ey_pos) = run_set(grid, &pos, eps);
@@ -398,8 +400,15 @@ fn l2_norm(a: &Array1<f64>) -> f64 {
 
 fn validate_random(nx: usize, ny: usize, dx: f64, dy: f64, n: usize, steps: usize, dt: f64, eps: f64, seed: u64) {
     let grid = Grid2D::new(nx, ny, dx, dy);
+    let lx = grid.lx();
+    let ly = grid.ly();
 
     let mut particles = ParticleState::zeros(n, Some(seed));
+    // 位置缩放到实际物理范围（与 random_particles::run 一致）
+    for i in 0..n {
+        particles.x[i] *= lx;
+        particles.y[i] *= ly;
+    }
     let mut rng = StdRng::seed_from_u64(seed.wrapping_add(123));
     for i in 0..n {
         particles.vx[i] = (rng.gen::<f64>() - 0.5) * 0.02;
