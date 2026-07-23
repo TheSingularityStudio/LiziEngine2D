@@ -350,8 +350,7 @@ fn render_right_panel(ctx: &egui::Context, state: &mut SimulationState) {
                     ui.checkbox(&mut interaction.drag_inertia_mode, "惯性模式");
                     if interaction.drag_inertia_mode {
                         ui.add_space(4.0);
-                        ui.add(egui::Slider::new(&mut interaction.drag_force_strength, 1.0..=10.0)
-                            .text("力强度").step_by(1.0));
+                        ui.add(egui::DragValue::new(&mut interaction.drag_force_strength).speed(0.1).suffix(" 力强度"));
                         ui.add_space(4.0);
                         ui.label("持续向鼠标位置施加弹簧力，\n粒子具有物理惯性效果");
                         ui.add_space(4.0);
@@ -364,7 +363,7 @@ fn render_right_panel(ctx: &egui::Context, state: &mut SimulationState) {
                 }
                 ToolMode::SpawnParticle => {
                     ui.separator(); ui.add_space(4.0);
-                    ui.label("生成清单（点击画布生成所有粒子）："); ui.add_space(4.0);
+                    ui.label("生成清单："); ui.add_space(4.0);
                     let mut remove_idx: Option<usize> = None;
                     for (i, entry) in interaction.spawnment_list.entries.iter_mut().enumerate() {
                         ui.group(|ui| {
@@ -376,13 +375,12 @@ fn render_right_panel(ctx: &egui::Context, state: &mut SimulationState) {
                             });
                             ui.horizontal(|ui| {
                                 ui.label("电荷量：");
-                                ui.add(egui::Slider::new(&mut entry.charge, -10.0..=10.0).text("q").step_by(0.1).clamping(egui::SliderClamping::Never));
+                                ui.add(egui::DragValue::new(&mut entry.charge).speed(0.1).suffix(" q"));
                             });
                             ui.horizontal(|ui| {
                                 ui.label("质量：");
-                                ui.add(egui::Slider::new(&mut entry.mass, 0.1..=10.0).text("m").step_by(0.1).clamping(egui::SliderClamping::Never));
+                                ui.add(egui::DragValue::new(&mut entry.mass).speed(0.1).suffix(" m"));
                             });
-                            ui.checkbox(&mut entry.fixed, "固定（速度=0）");
                         });
                         ui.add_space(4.0);
                     }
@@ -501,17 +499,7 @@ fn render_right_panel(ctx: &egui::Context, state: &mut SimulationState) {
             if state.sim.gravity_enabled {
                 ui.add_space(4.0);
                 ui.horizontal(|ui| { ui.set_min_width(50.0); ui.label("大小："); });
-                ui.add(egui::Slider::new(&mut state.sim.gravity_y, -50.0..=50.0).text("g").step_by(0.1));
-                ui.add_space(4.0);
-                ui.horizontal(|ui| {
-                    ui.label("方向：");
-                    let mut dir_idx = if state.sim.gravity_y < 0.0 { 0 } else if state.sim.gravity_y > 0.0 { 1 } else { 0 };
-                    let dirs = ["↓ 向下", "↑ 向上"];
-                    let changed = ui.radio_value(&mut dir_idx, 0, dirs[0]).changed()
-                        || ui.radio_value(&mut dir_idx, 1, dirs[1]).changed();
-                    if changed { let abs_val = state.sim.gravity_y.abs().max(1.0); state.sim.gravity_y = if dir_idx == 0 { -abs_val } else { abs_val }; }
-                });
-                ui.add_space(4.0); ui.label(format!("当前重力: ({:.2}, {:.2})", state.sim.gravity_x, state.sim.gravity_y));
+                ui.add(egui::DragValue::new(&mut state.sim.gravity_y).speed(0.1).suffix(" g"));
             }
 
             ui.add_space(16.0); ui.separator(); ui.add_space(8.0);
@@ -519,8 +507,7 @@ fn render_right_panel(ctx: &egui::Context, state: &mut SimulationState) {
             if state.sim.friction_enabled {
                 ui.add_space(4.0);
                 ui.horizontal(|ui| { ui.set_min_width(50.0); ui.label("阻尼："); });
-                ui.add(egui::Slider::new(&mut state.sim.friction_damping, 0.0..=5.0).text("系数").step_by(0.01));
-                ui.add_space(4.0); ui.label("F = -damping × v"); ui.label("值越大，粒子减速越快");
+                ui.add(egui::DragValue::new(&mut state.sim.friction_damping).speed(0.01).suffix(" 系数"));
             }
         });
     });
@@ -763,8 +750,8 @@ fn handle_mouse_interaction(
                     let (dx, dy) = offsets.get(i).copied().unwrap_or((0.0, 0.0));
                     let px = (world_x + dx).clamp(0.0, lx);
                     let py = (world_y + dy).clamp(0.0, ly);
-                    let vx = if entry.fixed { 0.0 } else { 0.0 };
-                    let vy = if entry.fixed { 0.0 } else { 0.0 };
+                    let vx = 0.0;
+                    let vy = 0.0;
                     sim.particles.add_particle(px, py, entry.charge, entry.mass, vx, vy);
                 }
                 sim.v = None; sim.ex = None; sim.ey = None;

@@ -43,7 +43,6 @@ impl ToolMode {
 pub struct SpawnParticleParams {
     pub charge: f64, // 电荷量
     pub mass: f64,   // 质量
-    pub fixed: bool, // 是否固定粒子（速度为0）
 }
 
 impl Default for SpawnParticleParams {
@@ -51,7 +50,6 @@ impl Default for SpawnParticleParams {
         Self {
             charge: 1.0,
             mass: 1.0,
-            fixed: false,
         }
     }
 }
@@ -61,7 +59,6 @@ impl Default for SpawnParticleParams {
 pub struct SpawnmentEntry {
     pub charge: f64,
     pub mass: f64,
-    pub fixed: bool,
 }
 
 impl Default for SpawnmentEntry {
@@ -69,7 +66,6 @@ impl Default for SpawnmentEntry {
         Self {
             charge: 1.0,
             mass: 1.0,
-            fixed: false,
         }
     }
 }
