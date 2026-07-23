@@ -230,7 +230,9 @@ fn render_menu_bar(ctx: &egui::Context, state: &mut SimulationState) -> bool {
 fn render_dialogs(ctx: &egui::Context, state: &mut SimulationState) {
     if let Some(msg) = &state.message_dialog.clone() {
         let mut open = true;
-        egui::Window::new("消息").open(&mut open).resizable(false).default_size([400.0, 150.0]).show(ctx, |ui| {
+        egui::Window::new("消息").open(&mut open).resizable(false).default_size([400.0, 150.0])
+            .anchor(egui::Align2::CENTER_CENTER, (0.0, 0.0))
+            .show(ctx, |ui| {
             ui.add_space(8.0); ui.label(msg); ui.add_space(12.0);
             if ui.button("确定").clicked() { state.message_dialog = None; }
         });
@@ -238,7 +240,9 @@ fn render_dialogs(ctx: &egui::Context, state: &mut SimulationState) {
     }
     if state.show_about_dialog {
         egui::Window::new("关于 LiziEngine2D").open(&mut state.show_about_dialog).resizable(false)
-            .default_size([420.0, 280.0]).show(ctx, |ui| {
+            .default_size([420.0, 280.0])
+            .anchor(egui::Align2::CENTER_CENTER, (0.0, 0.0))
+            .show(ctx, |ui| {
             egui::ScrollArea::vertical().show(ui, |ui| {
                 ui.heading("LiziEngine2D"); ui.label("版本 0.1.0"); ui.separator(); ui.add_space(8.0);
                 ui.label("二维静电 PIC (Particle-in-Cell) 模拟器"); ui.label("使用 Rust + egui 实现");
@@ -252,7 +256,9 @@ fn render_dialogs(ctx: &egui::Context, state: &mut SimulationState) {
     }
     if state.show_shortcuts_dialog {
         egui::Window::new("快捷键说明").open(&mut state.show_shortcuts_dialog).resizable(false)
-            .default_size([380.0, 300.0]).show(ctx, |ui| {
+            .default_size([380.0, 300.0])
+            .anchor(egui::Align2::CENTER_CENTER, (0.0, 0.0))
+            .show(ctx, |ui| {
             egui::ScrollArea::vertical().show(ui, |ui| {
                 ui.heading("工具模式"); ui.separator(); ui.add_space(4.0);
                 ui.label("左侧面板选择四种工具：");
