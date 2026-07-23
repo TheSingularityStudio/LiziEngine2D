@@ -30,10 +30,10 @@ impl ToolMode {
 
     pub fn icon(&self) -> &'static str {
         match self {
-            ToolMode::DragParticle => "\u{1F5B1}",  // 🖱
-            ToolMode::SpawnParticle => "+",
-            ToolMode::DeleteParticle => "-",
-            ToolMode::Inspect => "\u{1F50D}", // 🔍
+            ToolMode::DragParticle => "✋",
+            ToolMode::SpawnParticle => "✨",
+            ToolMode::DeleteParticle => "❌",
+            ToolMode::Inspect => "🔍",
         }
     }
 }
