@@ -4,7 +4,7 @@ use serde::{Deserialize, Serialize};
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum ToolMode {
     DragParticle,   // 拖动粒子
-    PlaceParticle,  // 放置粒子
+    SpawnParticle,  // 生成粒子
     DeleteParticle, // 删除粒子
     Inspect,        // 查看（缩放、平移、显示信息）
 }
@@ -13,7 +13,7 @@ impl ToolMode {
     pub fn all() -> [ToolMode; 4] {
         [
             ToolMode::DragParticle,
-            ToolMode::PlaceParticle,
+            ToolMode::SpawnParticle,
             ToolMode::DeleteParticle,
             ToolMode::Inspect,
         ]
@@ -22,7 +22,7 @@ impl ToolMode {
     pub fn display_name(&self) -> &'static str {
         match self {
             ToolMode::DragParticle => "拖动",
-            ToolMode::PlaceParticle => "放置",
+            ToolMode::SpawnParticle => "生成",
             ToolMode::DeleteParticle => "删除",
             ToolMode::Inspect => "查看",
         }
@@ -30,23 +30,23 @@ impl ToolMode {
 
     pub fn icon(&self) -> &'static str {
         match self {
-            ToolMode::DragParticle => "\u{1F5B1}",  // 🖱
-            ToolMode::PlaceParticle => "+",
-            ToolMode::DeleteParticle => "-",
-            ToolMode::Inspect => "\u{1F50D}", // 🔍
+            ToolMode::DragParticle => "✋",
+            ToolMode::SpawnParticle => "✨",
+            ToolMode::DeleteParticle => "❌",
+            ToolMode::Inspect => "🔍",
         }
     }
 }
 
-/// 放置粒子的参数
+/// 生成粒子的参数
 #[derive(Debug, Clone)]
-pub struct PlaceParticleParams {
+pub struct SpawnParticleParams {
     pub charge: f64, // 电荷量
     pub mass: f64,   // 质量
     pub fixed: bool, // 是否固定粒子（速度为0）
 }
 
-impl Default for PlaceParticleParams {
+impl Default for SpawnParticleParams {
     fn default() -> Self {
         Self {
             charge: 1.0,
@@ -56,15 +56,15 @@ impl Default for PlaceParticleParams {
     }
 }
 
-/// 放置清单中的单个条目
+/// 生成清单中的单个条目
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct PlacementEntry {
+pub struct SpawnmentEntry {
     pub charge: f64,
     pub mass: f64,
     pub fixed: bool,
 }
 
-impl Default for PlacementEntry {
+impl Default for SpawnmentEntry {
     fn default() -> Self {
         Self {
             charge: 1.0,
@@ -98,42 +98,42 @@ impl ArrangeMode {
     }
 }
 
-/// 放置清单：可配置多种不同的粒子，点击时一次性放置
+/// 生成清单：可配置多种不同的粒子，点击时一次性生成
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct PlacementListData {
-    pub entries: Vec<PlacementEntry>,
+pub struct SpawnmentListData {
+    pub entries: Vec<SpawnmentEntry>,
     pub spacing: f64,
     pub arrange_mode: ArrangeMode,
 }
 
-/// 放置清单：可配置多种不同的粒子，点击时一次性放置
+/// 生成清单：可配置多种不同的粒子，点击时一次性生成
 #[derive(Debug, Clone)]
-pub struct PlacementList {
-    /// 是否启用放置清单（否则使用快速放置）
+pub struct SpawnmentList {
+    /// 是否启用生成清单（否则使用快速生成）
     pub enabled: bool,
     /// 清单中的粒子条目
-    pub entries: Vec<PlacementEntry>,
+    pub entries: Vec<SpawnmentEntry>,
     /// 粒子间距（归一化坐标）
     pub spacing: f64,
     /// 排列方式
     pub arrange_mode: ArrangeMode,
 }
 
-impl Default for PlacementList {
+impl Default for SpawnmentList {
     fn default() -> Self {
         Self {
-            enabled: false,
-            entries: vec![PlacementEntry::default()],
+            enabled: true,
+            entries: vec![SpawnmentEntry::default()],
             spacing: 0.03,
-            arrange_mode: ArrangeMode::Horizontal,
+            arrange_mode: ArrangeMode::Stack,
         }
     }
 }
 
-impl PlacementList {
+impl SpawnmentList {
     /// 导出为 JSON 字符串
     pub fn export_json(&self) -> Result<String, String> {
-        let data = PlacementListData {
+        let data = SpawnmentListData {
             entries: self.entries.clone(),
             spacing: self.spacing,
             arrange_mode: self.arrange_mode,
@@ -144,7 +144,7 @@ impl PlacementList {
 
     /// 从 JSON 字符串导入
     pub fn import_json(&mut self, json_str: &str) -> Result<(), String> {
-        let data: PlacementListData = serde_json::from_str(json_str)
+        let data: SpawnmentListData = serde_json::from_str(json_str)
             .map_err(|e| format!("反序列化失败: {}", e))?;
         self.entries = data.entries;
         self.spacing = data.spacing;
@@ -170,10 +170,10 @@ pub struct HoveredParticleInfo {
 pub struct InteractionState {
     /// 当前选中的工具模式
     pub tool_mode: ToolMode,
-    /// 放置粒子参数（快速放置）
-    pub place_params: PlaceParticleParams,
-    /// 放置清单
-    pub placement_list: PlacementList,
+    /// 生成粒子参数（快速生成）
+    pub spawn_params: SpawnParticleParams,
+    /// 生成清单
+    pub spawnment_list: SpawnmentList,
     /// 是否正在拖动粒子
     pub dragging: bool,
     /// 当前拖动的粒子索引（如果有）
@@ -190,14 +190,18 @@ pub struct InteractionState {
     pub last_pan_pos: Option<(f32, f32)>,
     /// 查看工具：悬停的粒子信息
     pub hovered_particle: Option<HoveredParticleInfo>,
+    /// 拖动工具：是否启用惯性模式（施加力而非瞬移）
+    pub drag_inertia_mode: bool,
+    /// 惯性模式下施加力的大小系数
+    pub drag_force_strength: f64,
 }
 
 impl Default for InteractionState {
     fn default() -> Self {
         Self {
             tool_mode: ToolMode::DragParticle,
-            place_params: PlaceParticleParams::default(),
-            placement_list: PlacementList::default(),
+            spawn_params: SpawnParticleParams::default(),
+            spawnment_list: SpawnmentList::default(),
             dragging: false,
             dragged_particle_index: None,
             selection_radius: 0.05, // 默认选择半径为窗口尺寸的 5%
@@ -206,6 +210,8 @@ impl Default for InteractionState {
             panning: false,
             last_pan_pos: None,
             hovered_particle: None,
+            drag_inertia_mode: false,
+            drag_force_strength: 1.0,
         }
     }
 }
@@ -221,15 +227,15 @@ impl InteractionState {
         self.zoom = 1.0;
     }
 
-    /// 根据放置清单生成所有粒子的坐标偏移量（相对于点击点）
+    /// 根据生成清单生成所有粒子的坐标偏移量（相对于点击点）
     /// 返回 (dx, dy) 向量列表
-    pub fn compute_placement_offsets(&self) -> Vec<(f64, f64)> {
-        let count = self.placement_list.entries.len();
+    pub fn compute_spawnment_offsets(&self) -> Vec<(f64, f64)> {
+        let count = self.spawnment_list.entries.len();
         if count == 0 {
             return Vec::new();
         }
-        let spacing = self.placement_list.spacing;
-        match self.placement_list.arrange_mode {
+        let spacing = self.spawnment_list.spacing;
+        match self.spawnment_list.arrange_mode {
             ArrangeMode::Stack => {
                 vec![(0.0, 0.0); count]
             }

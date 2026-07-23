@@ -117,6 +117,18 @@ impl ParticleState {
         self.m = remove_at(index, &self.m);
     }
 
+    /// 清空所有粒子
+    pub fn clear(&mut self) {
+        self.x = Array1::zeros(0);
+        self.y = Array1::zeros(0);
+        self.vx = Array1::zeros(0);
+        self.vy = Array1::zeros(0);
+        self.fx = Array1::zeros(0);
+        self.fy = Array1::zeros(0);
+        self.q = Array1::zeros(0);
+        self.m = Array1::zeros(0);
+    }
+
     /// 深拷贝
     pub fn copy(&self) -> Self {
         Self {

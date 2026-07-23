@@ -93,7 +93,7 @@ impl ElectrostaticSim2D {
     }
 
     /// 获取或初始化 Poisson 求解器（使用缓存的 FFT Handler）
-    fn get_or_init_solver(&mut self) -> &PoissonSolver {
+    fn get_or_init_solver(&mut self) -> &mut PoissonSolver {
         self.poisson_solver.get_or_insert_with(|| {
             PoissonSolver::new(
                 self.grid.nx,

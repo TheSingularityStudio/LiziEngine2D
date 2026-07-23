@@ -53,15 +53,15 @@ impl PoissonSolver {
     /// - eps: k² ≈ 0 模式的阈值，避免除零
     ///
     /// 返回: 电势 V, shape (nx, ny)
-    pub fn solve(&self, rho: &Array2<f64>, eps: f64) -> Array2<f64> {
+    pub fn solve(&mut self, rho: &Array2<f64>, eps: f64) -> Array2<f64> {
         // 转换为复数
         let mut rho_hat: Array2<Complex64> = rho.mapv(|v| Complex64::new(v, 0.0));
 
         // 2D FFT: 先沿 axis=0，再沿 axis=1
         let mut tmp = Array2::zeros((self.nx, self.ny));
 
-        ndfft(&rho_hat, &mut tmp, &self.handler_0, 0);
-        ndfft(&tmp, &mut rho_hat, &self.handler_1, 1);
+        ndfft(&rho_hat, &mut tmp, &mut self.handler_0, 0);
+        ndfft(&tmp, &mut rho_hat, &mut self.handler_1, 1);
 
         // V_hat = rho_hat / k² (k≠0 时), k≈0 时设为 0
         for i in 0..self.nx {
@@ -78,8 +78,8 @@ impl PoissonSolver {
         let mut tmp2 = Array2::zeros((self.nx, self.ny));
         let mut v_complex: Array2<Complex64> = Array2::zeros((self.nx, self.ny));
 
-        ndifft(&rho_hat, &mut tmp2, &self.handler_1, 1);
-        ndifft(&tmp2, &mut v_complex, &self.handler_0, 0);
+        ndifft(&rho_hat, &mut tmp2, &mut self.handler_1, 1);
+        ndifft(&tmp2, &mut v_complex, &mut self.handler_0, 0);
 
         // 取实部
         v_complex.mapv(|c| c.re)
@@ -193,7 +193,7 @@ mod tests {
     #[test]
     fn test_poisson_solver_uniform_rho_zero_laplacian() {
         // Uniform charge density should produce zero potential (k=0 mode)
-        let solver = PoissonSolver::new(8, 8, 1.0, 1.0, 1e-12);
+        let mut solver = PoissonSolver::new(8, 8, 1.0, 1.0, 1e-12);
         let rho = Array2::from_elem((8, 8), 1.0);
         let v = solver.solve(&rho, 1e-12);
         // Potential should be all zeros (k=0 mode removed)
@@ -209,7 +209,7 @@ mod tests {
         let ny = 16;
         let dx = 1.0;
         let dy = 1.0;
-        let solver = PoissonSolver::new(nx, ny, dx, dy, 1e-12);
+        let mut solver = PoissonSolver::new(nx, ny, dx, dy, 1e-12);
         let mut rho = Array2::zeros((nx, ny));
         rho[[8, 8]] = 1.0 / (dx * dy); // charge density per unit area
         
@@ -227,7 +227,7 @@ mod tests {
         let ny = 16;
         let dx = 1.0;
         let dy = 1.0;
-        let solver = PoissonSolver::new(nx, ny, dx, dy, 1e-12);
+        let mut solver = PoissonSolver::new(nx, ny, dx, dy, 1e-12);
         let mut rho = Array2::zeros((nx, ny));
         rho[[6, 8]] = 1.0 / (dx * dy);   // positive charge
         rho[[10, 8]] = -1.0 / (dx * dy); // negative charge
