@@ -251,7 +251,7 @@ fn render_dialogs(ctx: &egui::Context, state: &mut SimulationState) {
                 ui.heading("工具模式"); ui.separator(); ui.add_space(4.0);
                 ui.label("左侧面板选择四种工具：");
                 ui.label("  • 拖动粒子 — 点击选中粒子并拖拽移动");
-                ui.label("  • 放置粒子 — 点击画布空白处创建新粒子");
+                ui.label("  • 生成粒子 — 点击画布空白处创建新粒子");
                 ui.label("  • 删除粒子 — 点击粒子将其删除");
                 ui.label("  • 查看 — 滚轮缩放、拖拽平移画布，悬停查看粒子参数");
                 ui.add_space(8.0);
@@ -352,12 +352,11 @@ fn render_right_panel(ctx: &egui::Context, state: &mut SimulationState) {
                     ui.add(egui::Slider::new(&mut interaction.selection_radius, 0.01..=0.20)
                         .text("归一化").step_by(0.005));
                 }
-                ToolMode::PlaceParticle => {
+                ToolMode::SpawnParticle => {
                     ui.separator(); ui.add_space(4.0);
-                    ui.label("放置清单（点击画布放置所有粒子）："); ui.add_space(4.0);
-                    ui.label("（粒子堆叠于点击位置）"); ui.add_space(4.0);
+                    ui.label("生成清单（点击画布生成所有粒子）："); ui.add_space(4.0);
                     let mut remove_idx: Option<usize> = None;
-                    for (i, entry) in interaction.placement_list.entries.iter_mut().enumerate() {
+                    for (i, entry) in interaction.spawnment_list.entries.iter_mut().enumerate() {
                         ui.group(|ui| {
                             ui.horizontal(|ui| {
                                 ui.label(format!("#{}", i + 1));
@@ -367,33 +366,33 @@ fn render_right_panel(ctx: &egui::Context, state: &mut SimulationState) {
                             });
                             ui.horizontal(|ui| {
                                 ui.label("电荷量：");
-                                ui.add(egui::Slider::new(&mut entry.charge, -10.0..=10.0).text("q").step_by(0.1));
+                                ui.add(egui::Slider::new(&mut entry.charge, -10.0..=10.0).text("q").step_by(0.1).clamping(egui::SliderClamping::Never));
                             });
                             ui.horizontal(|ui| {
                                 ui.label("质量：");
-                                ui.add(egui::Slider::new(&mut entry.mass, 0.1..=10.0).text("m").step_by(0.1));
+                                ui.add(egui::Slider::new(&mut entry.mass, 0.1..=10.0).text("m").step_by(0.1).clamping(egui::SliderClamping::Never));
                             });
                             ui.checkbox(&mut entry.fixed, "固定（速度=0）");
                         });
                         ui.add_space(4.0);
                     }
-                    if let Some(idx) = remove_idx { interaction.placement_list.entries.remove(idx); }
+                    if let Some(idx) = remove_idx { interaction.spawnment_list.entries.remove(idx); }
                     ui.horizontal(|ui| {
                         if ui.button("+ 添加粒子").clicked() {
-                            interaction.placement_list.entries.push(crate::gui::interaction::PlacementEntry::default());
+                            interaction.spawnment_list.entries.push(crate::gui::interaction::SpawnmentEntry::default());
                         }
-                        if ui.button("- 清空清单").clicked() { interaction.placement_list.entries.clear(); }
+                        if ui.button("- 清空清单").clicked() { interaction.spawnment_list.entries.clear(); }
                     });
                     // 导入/导出按钮
                     ui.horizontal(|ui| {
                         if ui.button("📥 导入清单").clicked() {
                             if let Some(path) = rfd::FileDialog::new()
-                                .add_filter("放置清单", &["json"])
+                                .add_filter("生成清单", &["json"])
                                 .pick_file()
                             {
                                 match std::fs::read_to_string(path.clone()) {
                                     Ok(content) => {
-                                        match interaction.placement_list.import_json(&content) {
+                                        match interaction.spawnment_list.import_json(&content) {
                                             Ok(()) => {
                                                 state.message_dialog = Some(format!("✅ 成功导入清单\n路径: {}", path.display()));
                                             }
@@ -410,11 +409,11 @@ fn render_right_panel(ctx: &egui::Context, state: &mut SimulationState) {
                         }
                         if ui.button("📤 导出清单").clicked() {
                             if let Some(path) = rfd::FileDialog::new()
-                                .add_filter("放置清单", &["json"])
-                                .set_file_name("placement_list.json")
+                                .add_filter("生成清单", &["json"])
+                                .set_file_name("spawnment_list.json")
                                 .save_file()
                             {
-                                match interaction.placement_list.export_json() {
+                                match interaction.spawnment_list.export_json() {
                                     Ok(content) => {
                                         match std::fs::write(&path, &content) {
                                             Ok(()) => {
@@ -433,8 +432,8 @@ fn render_right_panel(ctx: &egui::Context, state: &mut SimulationState) {
                         }
                     });
                     ui.add_space(4.0); ui.separator(); ui.add_space(4.0);
-                    ui.label(format!("清单中共 {} 个粒子", interaction.placement_list.entries.len()));
-                    ui.label("点击画布放置所有粒子。");
+                    ui.label(format!("清单中共 {} 个粒子", interaction.spawnment_list.entries.len()));
+                    ui.label("点击画布生成所有粒子。");
                 }
                 ToolMode::DeleteParticle => {
                     ui.label("删除粒子"); ui.add_space(4.0);
@@ -749,10 +748,10 @@ fn handle_mouse_interaction(
             );
             if interaction.dragging && mouse_down { sim.v = None; sim.ex = None; sim.ey = None; }
         }
-        ToolMode::PlaceParticle => {
-            if mouse_clicked && !interaction.placement_list.entries.is_empty() {
-                let offsets = interaction.compute_placement_offsets();
-                for (i, entry) in interaction.placement_list.entries.iter().enumerate() {
+        ToolMode::SpawnParticle => {
+            if mouse_clicked && !interaction.spawnment_list.entries.is_empty() {
+                let offsets = interaction.compute_spawnment_offsets();
+                for (i, entry) in interaction.spawnment_list.entries.iter().enumerate() {
                     let (dx, dy) = offsets.get(i).copied().unwrap_or((0.0, 0.0));
                     let px = (world_x + dx).clamp(0.0, lx);
                     let py = (world_y + dy).clamp(0.0, ly);

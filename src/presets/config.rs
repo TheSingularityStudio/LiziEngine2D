@@ -63,13 +63,13 @@ impl PresetVariant {
                 "完全空白的场景，无任何粒子，适合自行添加粒子进行实验。"
             }
             PresetVariant::SingleCharge => {
-                "在网格中央放置一个单位正电荷，显示静电场 V 热力图。"
+                "在网格中央生成一个单位正电荷，显示静电场 V 热力图。"
             }
             PresetVariant::TwoChargesSame => {
-                "在网格左右两侧放置两个同号正电荷，观察叠加电场。"
+                "在网格左右两侧生成两个同号正电荷，观察叠加电场。"
             }
             PresetVariant::TwoChargesOpposite => {
-                "在网格左右两侧放置一正一负电荷，观察偶极子电场。"
+                "在网格左右两侧生成一正一负电荷，观察偶极子电场。"
             }
             PresetVariant::RandomParticles => {
                 "200 个随机初始化的粒子在静电场中运动，展示 PIC 模拟动画。"
@@ -97,7 +97,7 @@ impl PresetVariant {
             },
             PresetVariant::SingleCharge => PresetConfig {
                 name: "单点电荷",
-                description: "在网格中央放置一个单位正电荷，显示静电场 V 热力图。",
+                description: "在网格中央生成一个单位正电荷，显示静电场 V 热力图。",
                 nx: 64,
                 ny: 64,
                 dx: 1.0,
@@ -112,7 +112,7 @@ impl PresetVariant {
             },
             PresetVariant::TwoChargesSame => PresetConfig {
                 name: "双电荷（同号）",
-                description: "在网格左右两侧放置两个同号正电荷，观察叠加电场。",
+                description: "在网格左右两侧生成两个同号正电荷，观察叠加电场。",
                 nx: 64,
                 ny: 64,
                 dx: 1.0,
@@ -127,7 +127,7 @@ impl PresetVariant {
             },
             PresetVariant::TwoChargesOpposite => PresetConfig {
                 name: "双电荷（异号）",
-                description: "在网格左右两侧放置一正一负电荷，观察偶极子电场。",
+                description: "在网格左右两侧生成一正一负电荷，观察偶极子电场。",
                 nx: 64,
                 ny: 64,
                 dx: 1.0,

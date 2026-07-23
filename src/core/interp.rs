@@ -93,7 +93,7 @@ mod tests {
         let ey = Array2::zeros((4, 4)); // E_y is all zeros
 
         let mut particles = ParticleState::zeros(1, Some(0));
-        // Place particle near x=4.0 (wraps to x=0.0), y=2.0
+        // Spawn particle near x=4.0 (wraps to x=0.0), y=2.0
         particles.x[0] = 3.9;
         particles.y[0] = 2.0;
 

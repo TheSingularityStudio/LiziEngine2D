@@ -38,7 +38,7 @@ mod tests {
     fn test_scatter_single_charge_at_center() {
         let grid = make_grid();
         let mut p = ParticleState::zeros(1, Some(0));
-        // Place at center of cell (1,1): world coords (1.5, 1.5)
+        // Spawn at center of cell (1,1): world coords (1.5, 1.5)
         p.x[0] = 1.5;
         p.y[0] = 1.5;
         let rho = scatter_unit_charges_to_grid(&grid, &p);
@@ -86,7 +86,7 @@ mod tests {
     fn test_scatter_periodic_wrapping() {
         let grid = make_grid(); // lx = 4.0, ly = 4.0
         let mut p = ParticleState::zeros(1, Some(0));
-        // Place at right edge near x = 4.0 (wraps to 0.0)
+        // Spawn at right edge near x = 4.0 (wraps to 0.0)
         p.x[0] = 3.9;
         p.y[0] = 0.5;
         let rho = scatter_unit_charges_to_grid(&grid, &p);
