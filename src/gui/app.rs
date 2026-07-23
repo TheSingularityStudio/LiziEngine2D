@@ -631,8 +631,8 @@ fn render_central_canvas(ctx: &egui::Context, state: &mut SimulationState) {
         let ly = if snapshot.ly <= 0.0 { 1.0 } else { snapshot.ly };
 
         for p in 0..particle_count {
-            let nx_p = (((snapshot.x[p] / lx) * nx as f64 + 0.5) / nx as f64).clamp(0.0, 1.0);
-            let ny_p = (((snapshot.y[p] / ly) * ny as f64 + 0.5) / ny as f64).clamp(0.0, 1.0);
+            let nx_p = (snapshot.x[p] / lx).clamp(0.0, 1.0);
+            let ny_p = (snapshot.y[p] / ly).clamp(0.0, 1.0);
 
             let sx = texture_rect.left() + nx_p as f32 * texture_rect.width();
             let sy = texture_rect.bottom() - ny_p as f32 * texture_rect.height();
@@ -662,8 +662,8 @@ fn render_central_canvas(ctx: &egui::Context, state: &mut SimulationState) {
         if interaction.tool_mode == ToolMode::Inspect {
             if let Some(info) = &interaction.hovered_particle.clone() {
                 if info.index < particle_count {
-                    let nx_p = (((snapshot.x[info.index] / lx) * nx as f64 + 0.5) / nx as f64).clamp(0.0, 1.0);
-                    let ny_p = (((snapshot.y[info.index] / ly) * ny as f64 + 0.5) / ny as f64).clamp(0.0, 1.0);
+                    let nx_p = (snapshot.x[info.index] / lx).clamp(0.0, 1.0);
+                    let ny_p = (snapshot.y[info.index] / ly).clamp(0.0, 1.0);
                     let sx = texture_rect.left() + nx_p as f32 * texture_rect.width();
                     let sy = texture_rect.bottom() - ny_p as f32 * texture_rect.height();
 
@@ -733,12 +733,10 @@ fn handle_mouse_interaction(
 
     let tex_u = ((pos.x - texture_rect.left()) / texture_rect.width()).clamp(0.0f32, 1.0f32);
     let tex_v = ((texture_rect.bottom() - pos.y) / texture_rect.height()).clamp(0.0f32, 1.0f32);
-    let inv_nx = grid_nx as f64;
-    let inv_ny = grid_ny as f64;
     let tex_u_f64 = tex_u as f64;
     let tex_v_f64 = tex_v as f64;
-    let world_x = ((tex_u_f64 * inv_nx - 0.5) / inv_nx).clamp(0.0, 1.0) * lx;
-    let world_y = ((tex_v_f64 * inv_ny - 0.5) / inv_ny).clamp(0.0, 1.0) * ly;
+    let world_x = tex_u_f64.clamp(0.0, 1.0) * lx;
+    let world_y = tex_v_f64.clamp(0.0, 1.0) * ly;
 
     match interaction.tool_mode {
         ToolMode::DragParticle => {
@@ -765,15 +763,13 @@ fn handle_mouse_interaction(
         }
         ToolMode::DeleteParticle => {
             if mouse_clicked {
-                let particle_visual_u: Vec<f64> = sim.particles.x.iter()
-                    .map(|&x| (((x / lx) * inv_nx + 0.5) / inv_nx).clamp(0.0, 1.0)).collect();
-                let particle_visual_v: Vec<f64> = sim.particles.y.iter()
-                    .map(|&y| (((y / ly) * inv_ny + 0.5) / inv_ny).clamp(0.0, 1.0)).collect();
                 let mut min_dist = f64::MAX;
                 let mut min_index = None;
                 for i in 0..sim.particles.len() {
-                    let dx = particle_visual_u[i] - tex_u as f64;
-                    let dy = particle_visual_v[i] - tex_v as f64;
+                    let pu = (sim.particles.x[i] / lx).clamp(0.0, 1.0);
+                    let pv = (sim.particles.y[i] / ly).clamp(0.0, 1.0);
+                    let dx = pu - tex_u as f64;
+                    let dy = pv - tex_v as f64;
                     let dist = (dx * dx + dy * dy).sqrt();
                     if dist < min_dist { min_dist = dist; min_index = Some(i); }
                 }
@@ -826,16 +822,13 @@ fn handle_mouse_interaction(
 
             // 悬停粒子检测
             if !mouse_down {
-                let particle_visual_u: Vec<f64> = sim.particles.x.iter()
-                    .map(|&x| (((x / lx) * inv_nx + 0.5) / inv_nx).clamp(0.0, 1.0)).collect();
-                let particle_visual_v: Vec<f64> = sim.particles.y.iter()
-                    .map(|&y| (((y / ly) * inv_ny + 0.5) / inv_ny).clamp(0.0, 1.0)).collect();
-
                 let mut min_dist = f64::MAX;
                 let mut min_index = None;
                 for i in 0..sim.particles.len() {
-                    let dx = particle_visual_u[i] - tex_u as f64;
-                    let dy = particle_visual_v[i] - tex_v as f64;
+                    let pu = (sim.particles.x[i] / lx).clamp(0.0, 1.0);
+                    let pv = (sim.particles.y[i] / ly).clamp(0.0, 1.0);
+                    let dx = pu - tex_u as f64;
+                    let dy = pv - tex_v as f64;
                     let dist = (dx * dx + dy * dy).sqrt();
                     if dist < min_dist { min_dist = dist; min_index = Some(i); }
                 }
@@ -875,8 +868,8 @@ fn handle_drag_interaction(
     sim: &mut ElectrostaticSim2D,
     interaction: &mut InteractionState,
     _texture_rect: egui::Rect,
-    grid_nx: usize,
-    grid_ny: usize,
+    _grid_nx: usize,
+    _grid_ny: usize,
     lx: f64,
     ly: f64,
     _pos: egui::Pos2,
@@ -888,20 +881,15 @@ fn handle_drag_interaction(
     world_y: f64,
     mouse_down: bool,
 ) {
-    let inv_nx = grid_nx as f64;
-    let inv_ny = grid_ny as f64;
-
     if mouse_down {
         if !interaction.dragging {
-            let particle_visual_u: Vec<f64> = sim.particles.x.iter()
-                .map(|&x| (((x / lx) * inv_nx + 0.5) / inv_nx).clamp(0.0, 1.0)).collect();
-            let particle_visual_v: Vec<f64> = sim.particles.y.iter()
-                .map(|&y| (((y / ly) * inv_ny + 0.5) / inv_ny).clamp(0.0, 1.0)).collect();
             let mut min_dist = f64::MAX;
             let mut min_index = None;
             for i in 0..sim.particles.len() {
-                let dx = particle_visual_u[i] - tex_u as f64;
-                let dy = particle_visual_v[i] - tex_v as f64;
+                let pu = (sim.particles.x[i] / lx).clamp(0.0, 1.0);
+                let pv = (sim.particles.y[i] / ly).clamp(0.0, 1.0);
+                let dx = pu - tex_u as f64;
+                let dy = pv - tex_v as f64;
                 let dist = (dx * dx + dy * dy).sqrt();
                 if dist < min_dist { min_dist = dist; min_index = Some(i); }
             }
