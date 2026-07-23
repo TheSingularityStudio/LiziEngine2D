@@ -55,6 +55,7 @@ struct SimulationState {
     show_grid: bool,
     show_about_dialog: bool,
     show_shortcuts_dialog: bool,
+    show_clear_dialog: bool,
     message_dialog: Option<String>,
 }
 
@@ -118,6 +119,7 @@ impl LiziApp {
                                     show_left_panel: true, show_right_panel: true,
                                     show_heatmap: true, show_grid: false,
                                     show_about_dialog: false, show_shortcuts_dialog: false,
+                                    show_clear_dialog: false,
                                     message_dialog: None,
                                 });
                             }
@@ -270,6 +272,37 @@ fn render_dialogs(ctx: &egui::Context, state: &mut SimulationState) {
             });
         });
     }
+    if state.show_clear_dialog {
+        let sim = &mut state.sim;
+        let mut open = true;
+        egui::Window::new("清空场景")
+            .open(&mut open)
+            .resizable(false)
+            .default_size([300.0, 120.0])
+            .anchor(egui::Align2::CENTER_CENTER, (0.0, 0.0))
+            .show(ctx, |ui| {
+                ui.add_space(12.0);
+                ui.label("⚠  确定要清空所有粒子吗？");
+                ui.label("此操作不可撤销。");
+                ui.add_space(16.0);
+                ui.horizontal(|ui| {
+                    ui.add_space(30.0);
+                    if ui.button("✅ 确认清空").clicked() {
+                        sim.particles.clear();
+                        sim.v = None;
+                        sim.ex = None;
+                        sim.ey = None;
+                        state.message_dialog = Some("✅ 场景已清空".to_string());
+                        state.show_clear_dialog = false;
+                    }
+                    ui.add_space(20.0);
+                    if ui.button("❌ 取消").clicked() {
+                        state.show_clear_dialog = false;
+                    }
+                });
+            });
+        if !open { state.show_clear_dialog = false; }
+    }
 }
 
 fn render_left_panel(ctx: &egui::Context, state: &mut SimulationState) {
@@ -292,6 +325,10 @@ fn render_left_panel(ctx: &egui::Context, state: &mut SimulationState) {
             ui.label("快捷操作提示：");
             ui.label("拖拽可选择粒子");
             ui.label("点击画布执行操作");
+            ui.add_space(24.0);
+            if ui.button("🗑 清空场景").clicked() {
+                state.show_clear_dialog = true;
+            }
         });
     });
 }
@@ -509,7 +546,11 @@ fn render_simulation_panels(ctx: &egui::Context, state: &mut SimulationState) ->
     render_dialogs(ctx, state);
     render_left_panel(ctx, state);
     render_right_panel(ctx, state);
-    render_central_canvas(ctx, state);
+    let any_dialog_open = state.show_about_dialog
+        || state.show_shortcuts_dialog
+        || state.show_clear_dialog
+        || state.message_dialog.is_some();
+    render_central_canvas(ctx, state, any_dialog_open);
     if !state.paused {
         let dt = state.variant.config().dt;
         state.sim.step(dt);
@@ -518,7 +559,7 @@ fn render_simulation_panels(ctx: &egui::Context, state: &mut SimulationState) ->
     !back_flag
 }
 
-fn render_central_canvas(ctx: &egui::Context, state: &mut SimulationState) {
+fn render_central_canvas(ctx: &egui::Context, state: &mut SimulationState, any_dialog_open: bool) {
     let sim = &mut state.sim;
     let v_min = &mut state.v_min;
     let v_max = &mut state.v_max;
@@ -671,8 +712,10 @@ fn render_central_canvas(ctx: &egui::Context, state: &mut SimulationState) {
             }
         }
 
-        // 处理鼠标交互
-        handle_mouse_interaction(ui, sim, interaction, texture_rect, nx, ny, lx, ly);
+        // 处理鼠标交互（弹窗打开时阻止点击穿透）
+        if !any_dialog_open {
+            handle_mouse_interaction(ui, sim, interaction, texture_rect, nx, ny, lx, ly);
+        }
     });
 }
 
