@@ -43,7 +43,6 @@ impl ToolMode {
 pub struct SpawnParticleParams {
     pub charge: f64, // 电荷量
     pub mass: f64,   // 质量
-    pub fixed: bool, // 是否固定粒子（速度为0）
 }
 
 impl Default for SpawnParticleParams {
@@ -51,7 +50,6 @@ impl Default for SpawnParticleParams {
         Self {
             charge: 1.0,
             mass: 1.0,
-            fixed: false,
         }
     }
 }
@@ -61,7 +59,6 @@ impl Default for SpawnParticleParams {
 pub struct SpawnmentEntry {
     pub charge: f64,
     pub mass: f64,
-    pub fixed: bool,
 }
 
 impl Default for SpawnmentEntry {
@@ -69,7 +66,6 @@ impl Default for SpawnmentEntry {
         Self {
             charge: 1.0,
             mass: 1.0,
-            fixed: false,
         }
     }
 }
@@ -98,7 +94,7 @@ impl ArrangeMode {
     }
 }
 
-/// 生成清单：可配置多种不同的粒子，点击时一次性生成
+/// 单个清单的 JSON 数据格式
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SpawnmentListData {
     pub entries: Vec<SpawnmentEntry>,
@@ -106,23 +102,19 @@ pub struct SpawnmentListData {
     pub arrange_mode: ArrangeMode,
 }
 
-/// 生成清单：可配置多种不同的粒子，点击时一次性生成
-#[derive(Debug, Clone)]
-pub struct SpawnmentList {
-    /// 是否启用生成清单（否则使用快速生成）
-    pub enabled: bool,
-    /// 清单中的粒子条目
+/// 命名的生成清单
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct NamedSpawnmentList {
+    pub name: String,
     pub entries: Vec<SpawnmentEntry>,
-    /// 粒子间距（归一化坐标）
     pub spacing: f64,
-    /// 排列方式
     pub arrange_mode: ArrangeMode,
 }
 
-impl Default for SpawnmentList {
+impl Default for NamedSpawnmentList {
     fn default() -> Self {
         Self {
-            enabled: true,
+            name: "默认".to_string(),
             entries: vec![SpawnmentEntry::default()],
             spacing: 0.03,
             arrange_mode: ArrangeMode::Stack,
@@ -130,9 +122,9 @@ impl Default for SpawnmentList {
     }
 }
 
-impl SpawnmentList {
-    /// 导出为 JSON 字符串
-    pub fn export_json(&self) -> Result<String, String> {
+impl NamedSpawnmentList {
+    /// 导出为 JSON 字符串（单个清单格式，兼容旧版）
+    pub fn export_to_json(&self) -> Result<String, String> {
         let data = SpawnmentListData {
             entries: self.entries.clone(),
             spacing: self.spacing,
@@ -142,13 +134,139 @@ impl SpawnmentList {
             .map_err(|e| format!("序列化失败: {}", e))
     }
 
-    /// 从 JSON 字符串导入
-    pub fn import_json(&mut self, json_str: &str) -> Result<(), String> {
+    /// 从 JSON 字符串导入（单个清单格式，兼容旧版）
+    pub fn import_from_json(&mut self, json_str: &str) -> Result<(), String> {
         let data: SpawnmentListData = serde_json::from_str(json_str)
             .map_err(|e| format!("反序列化失败: {}", e))?;
         self.entries = data.entries;
         self.spacing = data.spacing;
         self.arrange_mode = data.arrange_mode;
+        Ok(())
+    }
+
+    /// 根据排列方式生成所有粒子的坐标偏移量（相对于点击点）
+    pub fn compute_spawnment_offsets(&self) -> Vec<(f64, f64)> {
+        let count = self.entries.len();
+        if count == 0 {
+            return Vec::new();
+        }
+        let spacing = self.spacing;
+        match self.arrange_mode {
+            ArrangeMode::Stack => {
+                vec![(0.0, 0.0); count]
+            }
+            ArrangeMode::Horizontal => {
+                let start = -(count as f64 - 1.0) / 2.0 * spacing;
+                (0..count).map(|i| {
+                    (start + i as f64 * spacing, 0.0)
+                }).collect()
+            }
+            ArrangeMode::Vertical => {
+                let start = -(count as f64 - 1.0) / 2.0 * spacing;
+                (0..count).map(|i| {
+                    (0.0, start + i as f64 * spacing)
+                }).collect()
+            }
+            ArrangeMode::Grid => {
+                let cols = (count as f64).sqrt().ceil() as usize;
+                let rows = (count + cols - 1) / cols;
+                let start_x = -(cols as f64 - 1.0) / 2.0 * spacing;
+                let start_y = -(rows as f64 - 1.0) / 2.0 * spacing;
+                (0..count).map(|i| {
+                    let col = i % cols;
+                    let row = i / cols;
+                    (start_x + col as f64 * spacing, start_y + row as f64 * spacing)
+                }).collect()
+            }
+        }
+    }
+}
+
+/// 多个生成清单的集合（用于 JSON 序列化）
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SpawnmentListCollectionData {
+    pub lists: Vec<NamedSpawnmentList>,
+}
+
+/// 多个生成清单的容器
+#[derive(Debug, Clone)]
+pub struct SpawnmentListCollection {
+    pub lists: Vec<NamedSpawnmentList>,
+    pub selected_index: usize,
+}
+
+impl SpawnmentListCollection {
+    pub fn new() -> Self {
+        Self {
+            lists: vec![NamedSpawnmentList::default()],
+            selected_index: 0,
+        }
+    }
+
+    /// 获取当前选中的清单
+    pub fn current_list(&self) -> Option<&NamedSpawnmentList> {
+        self.lists.get(self.selected_index)
+    }
+
+    /// 获取当前选中的清单（可变引用）
+    pub fn current_list_mut(&mut self) -> Option<&mut NamedSpawnmentList> {
+        self.lists.get_mut(self.selected_index)
+    }
+
+    /// 选中指定索引的清单
+    pub fn select_list(&mut self, index: usize) {
+        if index < self.lists.len() {
+            self.selected_index = index;
+        }
+    }
+
+    /// 添加新清单
+    pub fn add_list(&mut self, name: String) {
+        self.lists.push(NamedSpawnmentList {
+            name,
+            entries: vec![SpawnmentEntry::default()],
+            spacing: 0.03,
+            arrange_mode: ArrangeMode::Stack,
+        });
+    }
+
+    /// 删除指定索引的清单（如果只剩一个则不清空）
+    pub fn remove_list(&mut self, index: usize) -> bool {
+        if self.lists.len() <= 1 || index >= self.lists.len() {
+            return false;
+        }
+        self.lists.remove(index);
+        if self.selected_index >= self.lists.len() {
+            self.selected_index = self.lists.len() - 1;
+        }
+        true
+    }
+
+    /// 重命名指定索引的清单
+    pub fn rename_list(&mut self, index: usize, new_name: String) {
+        if let Some(list) = self.lists.get_mut(index) {
+            list.name = new_name;
+        }
+    }
+
+    /// 导出整个集合为 JSON
+    pub fn export_all_to_json(&self) -> Result<String, String> {
+        let data = SpawnmentListCollectionData {
+            lists: self.lists.clone(),
+        };
+        serde_json::to_string_pretty(&data)
+            .map_err(|e| format!("序列化失败: {}", e))
+    }
+
+    /// 从 JSON 导入整个集合
+    pub fn import_all_from_json(&mut self, json_str: &str) -> Result<(), String> {
+        let data: SpawnmentListCollectionData = serde_json::from_str(json_str)
+            .map_err(|e| format!("反序列化失败: {}", e))?;
+        if data.lists.is_empty() {
+            return Err("清单集合不能为空".to_string());
+        }
+        self.lists = data.lists;
+        self.selected_index = 0;
         Ok(())
     }
 }
@@ -172,8 +290,8 @@ pub struct InteractionState {
     pub tool_mode: ToolMode,
     /// 生成粒子参数（快速生成）
     pub spawn_params: SpawnParticleParams,
-    /// 生成清单
-    pub spawnment_list: SpawnmentList,
+    /// 生成清单集合
+    pub spawnment_lists: SpawnmentListCollection,
     /// 是否正在拖动粒子
     pub dragging: bool,
     /// 当前拖动的粒子索引（如果有）
@@ -201,7 +319,7 @@ impl Default for InteractionState {
         Self {
             tool_mode: ToolMode::DragParticle,
             spawn_params: SpawnParticleParams::default(),
-            spawnment_list: SpawnmentList::default(),
+            spawnment_lists: SpawnmentListCollection::new(),
             dragging: false,
             dragged_particle_index: None,
             selection_radius: 0.05, // 默认选择半径为窗口尺寸的 5%
@@ -227,44 +345,11 @@ impl InteractionState {
         self.zoom = 1.0;
     }
 
-    /// 根据生成清单生成所有粒子的坐标偏移量（相对于点击点）
+    /// 根据当前选中清单生成所有粒子的坐标偏移量（相对于点击点）
     /// 返回 (dx, dy) 向量列表
     pub fn compute_spawnment_offsets(&self) -> Vec<(f64, f64)> {
-        let count = self.spawnment_list.entries.len();
-        if count == 0 {
-            return Vec::new();
-        }
-        let spacing = self.spawnment_list.spacing;
-        match self.spawnment_list.arrange_mode {
-            ArrangeMode::Stack => {
-                vec![(0.0, 0.0); count]
-            }
-            ArrangeMode::Horizontal => {
-                // 以点击点为中心，水平等间距排列
-                let start = -(count as f64 - 1.0) / 2.0 * spacing;
-                (0..count).map(|i| {
-                    (start + i as f64 * spacing, 0.0)
-                }).collect()
-            }
-            ArrangeMode::Vertical => {
-                // 以点击点为中心，垂直等间距排列
-                let start = -(count as f64 - 1.0) / 2.0 * spacing;
-                (0..count).map(|i| {
-                    (0.0, start + i as f64 * spacing)
-                }).collect()
-            }
-            ArrangeMode::Grid => {
-                // 自动计算网格列数，尽量接近正方形
-                let cols = (count as f64).sqrt().ceil() as usize;
-                let rows = (count + cols - 1) / cols;
-                let start_x = -(cols as f64 - 1.0) / 2.0 * spacing;
-                let start_y = -(rows as f64 - 1.0) / 2.0 * spacing;
-                (0..count).map(|i| {
-                    let col = i % cols;
-                    let row = i / cols;
-                    (start_x + col as f64 * spacing, start_y + row as f64 * spacing)
-                }).collect()
-            }
-        }
+        self.spawnment_lists.current_list()
+            .map(|list| list.compute_spawnment_offsets())
+            .unwrap_or_default()
     }
 }
