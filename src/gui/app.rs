@@ -568,9 +568,12 @@ fn render_right_panel(ctx: &egui::Context, state: &mut SimulationState) {
                             }
                         }
                         if ui.button("📤 导出").clicked() {
+                            let default_name = interaction.spawnment_lists.current_list()
+                                .map(|l| format!("{}.json", l.name))
+                                .unwrap_or_else(|| "spawnment_list.json".to_string());
                             if let Some(path) = rfd::FileDialog::new()
                                 .add_filter("生成清单", &["json"])
-                                .set_file_name("spawnment_list.json")
+                                .set_file_name(&default_name)
                                 .save_file()
                             {
                                 if let Some(current_list) = interaction.spawnment_lists.current_list() {
