@@ -190,6 +190,10 @@ pub struct InteractionState {
     pub last_pan_pos: Option<(f32, f32)>,
     /// 查看工具：悬停的粒子信息
     pub hovered_particle: Option<HoveredParticleInfo>,
+    /// 拖动工具：是否启用惯性模式（施加力而非瞬移）
+    pub drag_inertia_mode: bool,
+    /// 惯性模式下施加力的大小系数
+    pub drag_force_strength: f64,
 }
 
 impl Default for InteractionState {
@@ -206,6 +210,8 @@ impl Default for InteractionState {
             panning: false,
             last_pan_pos: None,
             hovered_particle: None,
+            drag_inertia_mode: false,
+            drag_force_strength: 1.0,
         }
     }
 }

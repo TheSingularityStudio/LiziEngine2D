@@ -347,7 +347,17 @@ fn render_right_panel(ctx: &egui::Context, state: &mut SimulationState) {
             match interaction.tool_mode {
                 ToolMode::DragParticle => {
                     ui.label("拖动粒子"); ui.add_space(4.0);
-                    ui.label("拖拽粒子改变其位置。"); ui.label("选中时粒子速度归零。");
+                    ui.checkbox(&mut interaction.drag_inertia_mode, "惯性模式");
+                    if interaction.drag_inertia_mode {
+                        ui.add_space(4.0);
+                        ui.add(egui::Slider::new(&mut interaction.drag_force_strength, 1.0..=10.0)
+                            .text("力强度").step_by(1.0));
+                        ui.add_space(4.0);
+                        ui.label("持续向鼠标位置施加弹簧力，\n粒子具有物理惯性效果");
+                        ui.add_space(4.0);
+                    } else {
+                        ui.label("拖拽粒子改变其位置。"); ui.label("选中时粒子速度归零。");
+                    }
                     ui.add_space(8.0); ui.label("选择半径：");
                     ui.add(egui::Slider::new(&mut interaction.selection_radius, 0.01..=0.20)
                         .text("归一化").step_by(0.005));
@@ -864,7 +874,7 @@ fn handle_mouse_interaction(
 }
 
 fn handle_drag_interaction(
-    _ui: &egui::Ui,
+    ui: &egui::Ui,
     sim: &mut ElectrostaticSim2D,
     interaction: &mut InteractionState,
     _texture_rect: egui::Rect,
@@ -901,10 +911,27 @@ fn handle_drag_interaction(
             }
         }
         if let Some(idx) = interaction.dragged_particle_index {
-            sim.particles.x[idx] = world_x;
-            sim.particles.y[idx] = world_y;
-            sim.particles.vx[idx] = 0.0;
-            sim.particles.vy[idx] = 0.0;
+            if interaction.drag_inertia_mode {
+                // 惯性模式：施加指向鼠标位置的弹簧力
+                let dx = world_x - sim.particles.x[idx];
+                let dy = world_y - sim.particles.y[idx];
+                let force = interaction.drag_force_strength;
+                let mass = sim.particles.m[idx].max(0.1);
+                // a = F / m，速度累加
+                sim.particles.vx[idx] += force * dx / mass;
+                sim.particles.vy[idx] += force * dy / mass;
+                // 速度阻尼，防止振荡发散
+                sim.particles.vx[idx] *= 0.85;
+                sim.particles.vy[idx] *= 0.85;
+                // 标记需要持续重绘
+                ui.ctx().request_repaint();
+            } else {
+                // 普通模式：直接设置位置，速度归零
+                sim.particles.x[idx] = world_x;
+                sim.particles.y[idx] = world_y;
+                sim.particles.vx[idx] = 0.0;
+                sim.particles.vy[idx] = 0.0;
+            }
         }
     } else {
         interaction.dragging = false;
