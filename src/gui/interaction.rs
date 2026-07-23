@@ -122,10 +122,10 @@ pub struct PlacementList {
 impl Default for PlacementList {
     fn default() -> Self {
         Self {
-            enabled: false,
+            enabled: true,
             entries: vec![PlacementEntry::default()],
             spacing: 0.03,
-            arrange_mode: ArrangeMode::Horizontal,
+            arrange_mode: ArrangeMode::Stack,
         }
     }
 }
