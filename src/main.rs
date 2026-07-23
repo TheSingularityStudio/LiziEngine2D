@@ -1,3 +1,5 @@
+#![cfg_attr(windows, windows_subsystem = "windows")]
+
 use clap::{Parser, Subcommand};
 
 use lizi_engine_2d::gui::LiziApp;
