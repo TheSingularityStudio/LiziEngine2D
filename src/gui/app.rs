@@ -43,6 +43,7 @@ fn load_chinese_fonts(fonts: &mut egui::FontDefinitions) -> bool {
 
 struct SimulationState {
     variant: PresetVariant,
+    scene_name: String,
     sim: ElectrostaticSim2D,
     paused: bool,
     v_min: f64,
@@ -115,7 +116,9 @@ impl LiziApp {
                             if ui.button(name).clicked() {
                                 let sim = variant.create_sim();
                                 self.state = Some(SimulationState {
-                                    variant: *variant, sim,
+                                    variant: *variant,
+                                    scene_name: variant.display_name().to_string(),
+                                    sim,
                                     paused: false, v_min: 0.0, v_max: 1.0,
                                     interaction: InteractionState::new(),
                                     heatmap_texture: None,
@@ -157,6 +160,10 @@ fn render_menu_bar(ctx: &egui::Context, state: &mut SimulationState) -> bool {
                                 state.v_min = 0.0; state.v_max = 1.0;
                                 state.heatmap_texture = None;
                                 state.interaction = InteractionState::new();
+                                state.scene_name = path.file_stem()
+                                    .and_then(|s| s.to_str())
+                                    .map(|s| s.to_string())
+                                    .unwrap_or_else(|| "导入的场景".to_string());
                                 state.sim.v = None;
                                 state.sim.ex = None;
                                 state.sim.ey = None;
@@ -199,7 +206,7 @@ fn render_menu_bar(ctx: &egui::Context, state: &mut SimulationState) -> bool {
                 if ui.button("快捷键说明").clicked() { state.show_shortcuts_dialog = true; ui.close_menu(); }
             });
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                ui.label(format!("预设: {}", state.variant.display_name()));
+                ui.label(format!("场景: {}", state.scene_name));
                 if let Some(v) = state.sim.v.as_ref() {
                     let actual_min = v.iter().cloned().fold(f64::MAX, f64::min);
                     let actual_max = v.iter().cloned().fold(f64::MIN, f64::max);
@@ -212,6 +219,7 @@ fn render_menu_bar(ctx: &egui::Context, state: &mut SimulationState) -> bool {
                     state.sim = new_sim; state.paused = false;
                     state.v_min = 0.0; state.v_max = 1.0;
                     state.interaction = InteractionState::new();
+                    state.scene_name = state.variant.display_name().to_string();
                 }
                 if ui.button("⏭ Step").clicked() {
                     state.paused = true;
