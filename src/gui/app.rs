@@ -55,6 +55,8 @@ struct SimulationState {
     show_right_panel: bool,
     show_heatmap: bool,
     show_grid: bool,
+    show_white_particles: bool,
+    show_blue_particles: bool,
     show_about_dialog: bool,
     show_shortcuts_dialog: bool,
     show_clear_dialog: bool,
@@ -125,6 +127,7 @@ impl LiziApp {
                                     heatmap_texture: None,
                                     show_left_panel: true, show_right_panel: true,
                                     show_heatmap: true, show_grid: false,
+                                    show_white_particles: true, show_blue_particles: true,
                                     show_about_dialog: false, show_shortcuts_dialog: false,
                                     show_clear_dialog: false,
                                     show_rename_dialog: false,
@@ -201,6 +204,10 @@ fn render_menu_bar(ctx: &egui::Context, state: &mut SimulationState) -> bool {
                 if ui.checkbox(&mut show_heatmap, "显示热力图").changed() { state.show_heatmap = show_heatmap; }
                 let mut show_grid = state.show_grid;
                 if ui.checkbox(&mut show_grid, "显示网格").changed() { state.show_grid = show_grid; }
+                let mut show_white = state.show_white_particles;
+                if ui.checkbox(&mut show_white, "显示白色粒子").changed() { state.show_white_particles = show_white; }
+                let mut show_blue = state.show_blue_particles;
+                if ui.checkbox(&mut show_blue, "显示蓝色粒子").changed() { state.show_blue_particles = show_blue; }
                 ui.separator();
                 ui.menu_button("高级", |ui| {
                     ui.label("Poisson 求解器：");
@@ -948,13 +955,18 @@ fn render_central_canvas(ctx: &egui::Context, state: &mut SimulationState) {
             }
         }
         for p in 0..particle_count {
+            let is_blue = snapshot.q[p] < 0.0;
+            if (is_blue && !state.show_blue_particles) || (!is_blue && !state.show_white_particles) {
+                continue;
+            }
+
             let nx_p = (snapshot.x[p] / lx).clamp(0.0, 1.0);
             let ny_p = (snapshot.y[p] / ly).clamp(0.0, 1.0);
 
             let sx = texture_rect.left() + nx_p as f32 * texture_rect.width();
             let sy = texture_rect.bottom() - ny_p as f32 * texture_rect.height();
 
-            let color = if snapshot.q[p] < 0.0 { egui::Color32::CYAN } else { egui::Color32::WHITE };
+            let color = if is_blue { egui::Color32::CYAN } else { egui::Color32::WHITE };
 
             // 高亮悬停的粒子
             let radius = if interaction.tool_mode == ToolMode::Inspect {
