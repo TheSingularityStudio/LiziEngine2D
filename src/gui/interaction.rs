@@ -1,5 +1,7 @@
 use serde::{Deserialize, Serialize};
 
+use crate::core::connections::ConnectionType;
+
 /// 工具模式
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum ToolMode {
@@ -7,15 +9,17 @@ pub enum ToolMode {
     SpawnParticle,  // 生成粒子
     DeleteParticle, // 删除粒子
     Inspect,        // 查看（缩放、平移、显示信息）
+    ConnectParticle, // 连接粒子（弹簧/绳子）
 }
 
 impl ToolMode {
-    pub fn all() -> [ToolMode; 4] {
+    pub fn all() -> [ToolMode; 5] {
         [
             ToolMode::DragParticle,
             ToolMode::SpawnParticle,
             ToolMode::DeleteParticle,
             ToolMode::Inspect,
+            ToolMode::ConnectParticle,
         ]
     }
 
@@ -25,6 +29,7 @@ impl ToolMode {
             ToolMode::SpawnParticle => "生成",
             ToolMode::DeleteParticle => "删除",
             ToolMode::Inspect => "查看",
+            ToolMode::ConnectParticle => "连接",
         }
     }
 
@@ -34,6 +39,7 @@ impl ToolMode {
             ToolMode::SpawnParticle => "✨",
             ToolMode::DeleteParticle => "❌",
             ToolMode::Inspect => "🔍",
+            ToolMode::ConnectParticle => "🔗",
         }
     }
 }
@@ -312,6 +318,18 @@ pub struct InteractionState {
     pub drag_inertia_mode: bool,
     /// 惯性模式下施加力的大小系数
     pub drag_force_strength: f64,
+    /// 连接工具：已选中的第一个粒子索引
+    pub connection_source: Option<usize>,
+    /// 连接工具：鼠标在画布上的位置（用于画预览线）
+    pub connection_target_pos: Option<(f64, f64)>,
+    /// 连接工具：弹性系数 k
+    pub connection_stiffness: f64,
+    /// 连接工具：静止长度（0 = 创建时自动计算）
+    pub connection_rest_length: f64,
+    /// 连接工具：是否自动计算静止长度
+    pub connection_auto_rest_length: bool,
+    /// 连接工具：连接类型（弹簧/绳子）
+    pub connection_type: ConnectionType,
 }
 
 impl Default for InteractionState {
@@ -322,7 +340,7 @@ impl Default for InteractionState {
             spawnment_lists: SpawnmentListCollection::new(),
             dragging: false,
             dragged_particle_index: None,
-            selection_radius: 0.05, // 默认选择半径为窗口尺寸的 5%
+            selection_radius: 0.05,
             view_offset: (0.0, 0.0),
             zoom: 1.0,
             panning: false,
@@ -330,6 +348,12 @@ impl Default for InteractionState {
             hovered_particle: None,
             drag_inertia_mode: false,
             drag_force_strength: 1.0,
+            connection_source: None,
+            connection_target_pos: None,
+            connection_stiffness: 1.0,
+            connection_rest_length: 0.0,
+            connection_auto_rest_length: true,
+            connection_type: ConnectionType::Spring,
         }
     }
 }

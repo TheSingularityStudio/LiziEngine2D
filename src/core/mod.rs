@@ -1,4 +1,5 @@
 pub mod boundary;
+pub mod connections;
 pub mod grid;
 pub mod lz2d;
 pub mod particles;

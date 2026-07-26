@@ -3,16 +3,17 @@ use ndarray::Array3;
 use crate::core::grid::Grid2D;
 use crate::core::particles::ParticleState;
 use crate::core::scatter::scatter_unit_charges_to_grid;
-use crate::core::poisson_solver::{PoissonSolver, compute_e_from_potential_periodic};
+use crate::core::poisson_solver::{PoissonSolverEnum, PoissonSolverType, PoissonBoundaryType, compute_e_from_potential_periodic, compute_e_from_potential_nonperiodic};
 use crate::core::interp::gather_field_to_particles_bilinear;
 use crate::core::integrator::step_half_implicit_euler;
 use crate::core::boundary::{BoundaryType, apply_boundary_conditions, apply_speed_limit};
+use crate::core::connections::Connections;
 
 /// 2D 静电（电场-粒子）CPU 模拟器（PIC 风格实现；单位电荷、单位质量）
 ///
 /// 每个时间步的计算流程：
 ///   1) 将粒子散射到网格上，得到离散电荷密度 rho
-///   2) 在周期边界条件下求解 Poisson：通过 FFT 求得电势 V
+///   2) 求解 Poisson 方程得到电势 V（支持多种求解器算法和边界条件）
 ///   3) 在网格上计算电场：E = -∇V
 ///   4) 将网格电场通过 gather 插值回粒子位置，得到粒子受力（由于 q=1，故 F = E）
 ///   5) 使用半隐式欧拉对粒子积分更新（速度/位置）
@@ -39,15 +40,21 @@ pub struct ElectrostaticSim2D {
     pub friction_enabled: bool,
     /// 摩擦阻尼系数
     pub friction_damping: f64,
-    /// 缓存的 Poisson 求解器（带 FFT Handler 预分配）
-    poisson_solver: Option<PoissonSolver>,
+    /// 粒子间的连接（弹簧/绳子）
+    pub connections: Connections,
+    /// Poisson 求解器类型
+    pub poisson_solver_type: PoissonSolverType,
+    /// Poisson 边界条件（对迭代求解器有效）
+    pub poisson_boundary: PoissonBoundaryType,
+    /// 缓存的 Poisson 求解器
+    poisson_solver: Option<PoissonSolverEnum>,
 }
 
 impl ElectrostaticSim2D {
     /// 创建新的模拟器实例（使用默认配置：周期边界，最高速度10.0）
     pub fn new(grid: Grid2D, particles: ParticleState, eps_poisson: f64) -> Self {
         Self {
-            poisson_solver: None, // 首次使用时惰性初始化
+            poisson_solver: None,
             grid,
             particles,
             eps_poisson,
@@ -55,13 +62,16 @@ impl ElectrostaticSim2D {
             v: None,
             ex: None,
             ey: None,
-            boundary_type: BoundaryType::Periodic,
+            boundary_type: BoundaryType::Reflective,
             max_speed: Some(10.0),
             gravity_enabled: false,
             gravity_x: 0.0,
             gravity_y: -9.8,
             friction_enabled: false,
             friction_damping: 0.1,
+            connections: Connections::new(),
+            poisson_solver_type: PoissonSolverType::SOR,
+            poisson_boundary: PoissonBoundaryType::Dirichlet,
         }
     }
 
@@ -89,13 +99,17 @@ impl ElectrostaticSim2D {
             gravity_y: -9.8,
             friction_enabled: false,
             friction_damping: 0.1,
+            connections: Connections::new(),
+            poisson_solver_type: PoissonSolverType::SOR,
+            poisson_boundary: PoissonBoundaryType::Dirichlet,
         }
     }
 
-    /// 获取或初始化 Poisson 求解器（使用缓存的 FFT Handler）
-    fn get_or_init_solver(&mut self) -> &mut PoissonSolver {
+    /// 获取或初始化 Poisson 求解器
+    fn get_or_init_solver(&mut self) -> &mut PoissonSolverEnum {
         self.poisson_solver.get_or_insert_with(|| {
-            PoissonSolver::new(
+            PoissonSolverEnum::new(
+                self.poisson_solver_type,
                 self.grid.nx,
                 self.grid.ny,
                 self.grid.dx,
@@ -105,13 +119,34 @@ impl ElectrostaticSim2D {
         })
     }
 
+    /// 强制重新创建求解器（当求解器类型改变时调用）
+    pub fn reset_solver(&mut self) {
+        self.poisson_solver = Some(PoissonSolverEnum::new(
+            self.poisson_solver_type,
+            self.grid.nx,
+            self.grid.ny,
+            self.grid.dx,
+            self.grid.dy,
+            self.eps_poisson,
+        ));
+    }
+
     /// 计算当前粒子状态下的全场：rho → V → Ex, Ey，并将电场 gather 到粒子
     pub fn compute_fields(&mut self) {
         let rho = scatter_unit_charges_to_grid(&self.grid, &self.particles);
         let eps = self.eps_poisson;
+        let boundary = self.poisson_boundary;
         let solver = self.get_or_init_solver();
-        let v = solver.solve(&rho, eps);
-        let (ex, ey) = compute_e_from_potential_periodic(&v, self.grid.dx, self.grid.dy);
+        let v = solver.solve(&rho, eps, boundary);
+
+        let (ex, ey) = match self.poisson_solver_type {
+            PoissonSolverType::FFTPeriodic => {
+                compute_e_from_potential_periodic(&v, self.grid.dx, self.grid.dy)
+            }
+            PoissonSolverType::Jacobi | PoissonSolverType::SOR => {
+                compute_e_from_potential_nonperiodic(&v, self.grid.dx, self.grid.dy)
+            }
+        };
 
         // gather 电场到粒子受力
         let (ex_at_parts, ey_at_parts) = gather_field_to_particles_bilinear(
@@ -150,6 +185,9 @@ impl ElectrostaticSim2D {
                 self.particles.fy[i] -= self.friction_damping * self.particles.vy[i];
             }
         }
+
+        // 应用连接力（弹簧/绳子）
+        self.connections.apply_forces(&mut self.particles);
         
         step_half_implicit_euler(&self.grid, &mut self.particles, dt);
         
