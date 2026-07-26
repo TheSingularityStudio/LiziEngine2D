@@ -350,7 +350,7 @@ impl Default for InteractionState {
             drag_force_strength: 1.0,
             connection_source: None,
             connection_target_pos: None,
-            connection_stiffness: 50.0,
+            connection_stiffness: 1.0,
             connection_rest_length: 0.0,
             connection_auto_rest_length: true,
             connection_type: ConnectionType::Spring,

@@ -110,13 +110,13 @@ impl Connections {
 
             let force_magnitude = match conn.connection_type {
                 ConnectionType::Spring => {
-                    // 弹簧：F = -k * displacement，拉伸和压缩都作用
-                    -conn.stiffness * displacement
+                    // 弹簧：F = k * displacement，拉伸时拉回，压缩时推回
+                    conn.stiffness * displacement
                 }
                 ConnectionType::Rope => {
-                    // 绳子：仅在拉伸时施加力
+                    // 绳子：仅在拉伸时施加拉力
                     if displacement > 0.0 {
-                        -conn.stiffness * displacement
+                        conn.stiffness * displacement
                     } else {
                         continue; // 绳子不施加推力
                     }
