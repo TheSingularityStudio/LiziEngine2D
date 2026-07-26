@@ -2,6 +2,7 @@ use serde::{Deserialize, Serialize};
 use bincode;
 use crate::core::grid::Grid2D;
 use crate::core::particles::ParticleState;
+use crate::core::connections::Connection;
 use crate::core::sim::ElectrostaticSim2D;
 use crate::core::boundary::BoundaryType;
 
@@ -30,6 +31,7 @@ struct Lz2dFile {
     particles_q: Vec<f64>,
     /// 粒子质量（v4 新增）
     particles_m: Vec<f64>,
+    connections: Vec<Connection>,
     /// 重力参数（v2 新增）
     gravity_enabled: bool,
     gravity_x: f64,
@@ -63,6 +65,7 @@ impl Lz2dFile {
             particles_vy: sim.particles.vy.to_vec(),
             particles_q: sim.particles.q.to_vec(),
             particles_m: sim.particles.m.to_vec(),
+            connections: sim.connections.list.clone(),
             gravity_enabled: sim.gravity_enabled,
             gravity_x: sim.gravity_x,
             gravity_y: sim.gravity_y,
@@ -108,6 +111,7 @@ impl Lz2dFile {
             boundary_type,
             self.max_speed,
         );
+        sim.connections = crate::core::connections::Connections { list: self.connections };
         sim.gravity_enabled = self.gravity_enabled;
         sim.gravity_x = self.gravity_x;
         sim.gravity_y = self.gravity_y;
@@ -203,6 +207,7 @@ mod tests {
         assert_eq!(loaded.max_speed, Some(10.0));
         assert_eq!(loaded.boundary_type, BoundaryType::Periodic);
         assert_eq!(loaded.particles.len(), 5);
+        assert_eq!(loaded.connections.list.len(), 0);
 
         // 验证粒子位置还原
         for i in 0..5 {
@@ -248,6 +253,28 @@ mod tests {
         for i in 0..sim.particles.len() {
             assert!((loaded.particles.m[i] - sim.particles.m[i]).abs() < 1e-15);
         }
+
+        std::fs::remove_file(&temp_path).ok();
+    }
+
+    #[test]
+    fn test_save_load_with_connections() {
+        let mut sim = create_test_sim();
+        sim.connections.add(crate::core::connections::Connection {
+            particle_a: 0,
+            particle_b: 1,
+            rest_length: 1.5,
+            stiffness: 5.0,
+            connection_type: crate::core::connections::ConnectionType::Spring,
+        });
+        let temp_path = std::env::temp_dir().join("test_connections.lz2d");
+        let path_str = temp_path.to_string_lossy().to_string();
+
+        save_to_file(&sim, 0, &path_str).unwrap();
+        let (loaded, _) = load_from_file(&path_str).unwrap();
+
+        assert_eq!(loaded.connections.list.len(), 1);
+        assert_eq!(loaded.connections.list[0], sim.connections.list[0]);
 
         std::fs::remove_file(&temp_path).ok();
     }
