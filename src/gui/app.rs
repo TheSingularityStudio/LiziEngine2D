@@ -269,10 +269,11 @@ fn render_dialogs(ctx: &egui::Context, state: &mut SimulationState) {
             .show(ctx, |ui| {
             egui::ScrollArea::vertical().show(ui, |ui| {
                 ui.heading("工具模式"); ui.separator(); ui.add_space(4.0);
-                ui.label("左侧面板选择四种工具：");
+                ui.label("左侧面板选择五种工具：");
                 ui.label("  • 拖动粒子 — 点击选中粒子并拖拽移动");
                 ui.label("  • 生成粒子 — 点击画布空白处创建新粒子");
                 ui.label("  • 删除粒子 — 点击粒子将其删除");
+                ui.label("  • 连接 — 点击两个粒子创建弹簧/绳子连接");
                 ui.label("  • 查看 — 滚轮缩放、拖拽平移画布，悬停查看粒子参数");
                 ui.add_space(8.0);
                 ui.heading("画布操作"); ui.separator(); ui.add_space(4.0);
@@ -309,6 +310,7 @@ fn render_dialogs(ctx: &egui::Context, state: &mut SimulationState) {
                     ui.add_space(30.0);
                     if ui.button("✅ 确认清空").clicked() {
                         sim.particles.clear();
+                        sim.connections.list.clear();
                         sim.v = None;
                         sim.ex = None;
                         sim.ey = None;
@@ -407,6 +409,10 @@ fn render_left_panel(ctx: &egui::Context, state: &mut SimulationState) {
             ui.label("快捷操作提示：");
             ui.label("拖拽可选择粒子");
             ui.label("点击画布执行操作");
+            ui.add_space(4.0);
+            ui.label("🔗 连接工具：左键点选两");
+            ui.label("个粒子创建；右键点击连");
+            ui.label("接线可删除该连接");
             ui.add_space(24.0);
             if ui.button("🗑 清空场景").clicked() {
                 state.show_clear_dialog = true;
@@ -621,7 +627,7 @@ fn render_right_panel(ctx: &egui::Context, state: &mut SimulationState) {
                     ui.label(format!("偏移: ({:.1}, {:.1})", interaction.view_offset.0, interaction.view_offset.1));
                     ui.add_space(4.0);
                     if ui.button("重置视图").clicked() { interaction.reset_view(); }
-                    ui.add_space(8.0); ui.separator(); ui.add_space(4.0);
+            ui.add_space(8.0); ui.separator(); ui.add_space(4.0);
 
                     // 显示悬停粒子信息
                     if let Some(info) = &interaction.hovered_particle {
@@ -636,6 +642,68 @@ fn render_right_panel(ctx: &egui::Context, state: &mut SimulationState) {
                     } else {
                         ui.label("将鼠标悬停在粒子上");
                         ui.label("查看详细信息");
+                    }
+                }
+                ToolMode::ConnectParticle => {
+                    ui.label("连接粒子"); ui.add_space(4.0);
+                    ui.label("点击第一个粒子，再点击第二个粒子创建连接。");
+                    ui.label("点击已选中的粒子可取消选择。");
+                    ui.add_space(8.0);
+
+                    // 连接类型切换
+                    ui.label("连接类型：");
+                    ui.horizontal(|ui| {
+                        let is_spring = interaction.connection_type == crate::core::connections::ConnectionType::Spring;
+                        if ui.radio_value(&mut interaction.connection_type, crate::core::connections::ConnectionType::Spring, "弹簧").clicked() {
+                            // 如果点击时已是弹簧，再次点击取消
+                            if is_spring {
+                                interaction.connection_type = crate::core::connections::ConnectionType::Spring;
+                            }
+                        }
+                        let is_rope = interaction.connection_type == crate::core::connections::ConnectionType::Rope;
+                        if ui.radio_value(&mut interaction.connection_type, crate::core::connections::ConnectionType::Rope, "绳子").clicked() {
+                            if is_rope {
+                                interaction.connection_type = crate::core::connections::ConnectionType::Rope;
+                            }
+                        }
+                    });
+                    ui.add_space(4.0);
+
+                    // 弹性系数
+                    ui.horizontal(|ui| {
+                        ui.label("弹性系数 k：");
+                        ui.add(egui::DragValue::new(&mut interaction.connection_stiffness).speed(1.0).suffix(""));
+                    });
+                    ui.add_space(4.0);
+
+                    // 静止长度
+                    ui.checkbox(&mut interaction.connection_auto_rest_length, "自动静止长度");
+                    if !interaction.connection_auto_rest_length {
+                        ui.horizontal(|ui| {
+                            ui.label("静止长度：");
+                            ui.add(egui::DragValue::new(&mut interaction.connection_rest_length).speed(0.01).suffix(""));
+                        });
+                    }
+                    ui.add_space(8.0); ui.separator(); ui.add_space(4.0);
+
+                    // 显示当前选中状态
+                    if let Some(src_idx) = interaction.connection_source {
+                        ui.label(format!("已选粒子 #{}", src_idx));
+                        ui.label("点击另一个粒子创建连接");
+                    } else {
+                        ui.label("未选择粒子");
+                        ui.label("点击一个粒子开始");
+                    }
+
+                    // 显示当前连接列表
+                    let conn_count = state.sim.connections.list.len();
+                    ui.add_space(4.0);
+                    ui.label(format!("连接数: {}", conn_count));
+                    if conn_count > 0 {
+                        ui.add_space(4.0);
+                        if ui.button("清空所有连接").clicked() {
+                            state.sim.connections.list.clear();
+                        }
                     }
                 }
             }
@@ -762,8 +830,76 @@ fn render_central_canvas(ctx: &egui::Context, state: &mut SimulationState) {
             painter.rect_stroke(texture_rect, 0.0, (1.0, egui::Color32::GRAY), egui::StrokeKind::Inside);
         }
 
-        // 绘制粒子
+        let particle_count = snapshot.x.len();
+        let lx = if snapshot.lx <= 0.0 { 1.0 } else { snapshot.lx };
+        let ly = if snapshot.ly <= 0.0 { 1.0 } else { snapshot.ly };
+
+        // 绘制连接线（在粒子下方）
         let painter = ui.painter();
+        for conn in &sim.connections.list {
+            let idx_a = conn.particle_a;
+            let idx_b = conn.particle_b;
+            if idx_a >= particle_count || idx_b >= particle_count {
+                continue;
+            }
+            let ax = (snapshot.x[idx_a] / lx).clamp(0.0, 1.0);
+            let ay = (snapshot.y[idx_a] / ly).clamp(0.0, 1.0);
+            let bx = (snapshot.x[idx_b] / lx).clamp(0.0, 1.0);
+            let by = (snapshot.y[idx_b] / ly).clamp(0.0, 1.0);
+
+            let sx1 = texture_rect.left() + ax as f32 * texture_rect.width();
+            let sy1 = texture_rect.bottom() - ay as f32 * texture_rect.height();
+            let sx2 = texture_rect.left() + bx as f32 * texture_rect.width();
+            let sy2 = texture_rect.bottom() - by as f32 * texture_rect.height();
+
+            let (line_color, stroke_width) = match conn.connection_type {
+                crate::core::connections::ConnectionType::Spring => {
+                    (egui::Color32::GREEN, 2.0)
+                }
+                crate::core::connections::ConnectionType::Rope => {
+                    (egui::Color32::from_rgb(255, 165, 0), 2.0) // 橙色
+                }
+            };
+            painter.line_segment(
+                [egui::pos2(sx1, sy1), egui::pos2(sx2, sy2)],
+                (stroke_width, line_color),
+            );
+        }
+
+        // 连接工具：绘制从已选粒子到鼠标位置的预览线
+        if interaction.tool_mode == ToolMode::ConnectParticle {
+            if let Some(src_idx) = interaction.connection_source {
+                if src_idx < particle_count {
+                    if let Some(target_pos) = interaction.connection_target_pos {
+                        let src_x = (snapshot.x[src_idx] / lx).clamp(0.0, 1.0);
+                        let src_y = (snapshot.y[src_idx] / ly).clamp(0.0, 1.0);
+                        let sx = texture_rect.left() + src_x as f32 * texture_rect.width();
+                        let sy = texture_rect.bottom() - src_y as f32 * texture_rect.height();
+
+                        // 将鼠标世界坐标转为屏幕坐标
+                        let target_screen_x = texture_rect.left() + target_pos.0 as f32 * texture_rect.width();
+                        let target_screen_y = texture_rect.bottom() - target_pos.1 as f32 * texture_rect.height();
+
+                        // 半透明预览线
+                        let preview_color = match interaction.connection_type {
+                            crate::core::connections::ConnectionType::Spring => {
+                                egui::Color32::from_rgba_premultiplied(0, 255, 0, 100)
+                            }
+                            crate::core::connections::ConnectionType::Rope => {
+                                egui::Color32::from_rgba_premultiplied(255, 165, 0, 100)
+                            }
+                        };
+                        painter.line_segment(
+                            [egui::pos2(sx, sy), egui::pos2(target_screen_x, target_screen_y)],
+                            (2.0, preview_color),
+                        );
+
+                        // 在已选粒子周围画高亮圈
+                        painter.circle_stroke(egui::pos2(sx, sy), 8.0, (2.0, egui::Color32::YELLOW));
+                    }
+                }
+            }
+        }
 
         // 绘制网格（如果启用）
         if state.show_grid {
@@ -787,10 +923,6 @@ fn render_central_canvas(ctx: &egui::Context, state: &mut SimulationState) {
                 );
             }
         }
-        let particle_count = snapshot.x.len();
-        let lx = if snapshot.lx <= 0.0 { 1.0 } else { snapshot.lx };
-        let ly = if snapshot.ly <= 0.0 { 1.0 } else { snapshot.ly };
-
         for p in 0..particle_count {
             let nx_p = (snapshot.x[p] / lx).clamp(0.0, 1.0);
             let ny_p = (snapshot.y[p] / ly).clamp(0.0, 1.0);
@@ -940,6 +1072,10 @@ fn handle_mouse_interaction(
                 }
                 if let Some(idx) = min_index {
                     if min_dist <= interaction.selection_radius {
+                        // 删除涉及该粒子的所有连接
+                        sim.connections.remove_for_particle(idx);
+                        // 重新映射剩余连接的粒子索引
+                        sim.connections.remap_after_removal(idx);
                         sim.particles.remove_particle(idx);
                         sim.v = None; sim.ex = None; sim.ey = None;
                         ui.ctx().request_repaint();
@@ -1019,6 +1155,128 @@ fn handle_mouse_interaction(
             }
 
             // 不处理鼠标点击其他操作
+        }
+        ToolMode::ConnectParticle => {
+            // 更新鼠标位置（用于预览线）
+            let mouse_world_x = tex_u_f64.clamp(0.0, 1.0);
+            let mouse_world_y = tex_v_f64.clamp(0.0, 1.0);
+            interaction.connection_target_pos = Some((mouse_world_x, mouse_world_y));
+            ui.ctx().request_repaint();
+
+            // 右键点击连接线删除
+            let right_clicked = ui.input(|i| i.pointer.button_clicked(egui::PointerButton::Secondary));
+            if right_clicked {
+                // 计算点到线段距离的平方
+                let px = mouse_world_x;
+                let py = mouse_world_y;
+                let mut closest_conn: Option<usize> = None;
+                let mut closest_dist_sq = f64::MAX;
+
+                for (ci, conn) in sim.connections.list.iter().enumerate() {
+                    let idx_a = conn.particle_a;
+                    let idx_b = conn.particle_b;
+                    if idx_a >= sim.particles.len() || idx_b >= sim.particles.len() {
+                        continue;
+                    }
+                    let ax = (sim.particles.x[idx_a] / lx).clamp(0.0, 1.0);
+                    let ay = (sim.particles.y[idx_a] / ly).clamp(0.0, 1.0);
+                    let bx = (sim.particles.x[idx_b] / lx).clamp(0.0, 1.0);
+                    let by = (sim.particles.y[idx_b] / ly).clamp(0.0, 1.0);
+
+                    // 点到线段距离平方
+                    let abx = bx - ax;
+                    let aby = by - ay;
+                    let apx = px - ax;
+                    let apy = py - ay;
+                    let ab_len_sq = abx * abx + aby * aby;
+                    if ab_len_sq < 1e-15 {
+                        // 退化线段，直接用点到点距离
+                        let ddx = px - ax;
+                        let ddy = py - ay;
+                        let d = ddx * ddx + ddy * ddy;
+                        if d < closest_dist_sq {
+                            closest_dist_sq = d;
+                            closest_conn = Some(ci);
+                        }
+                        continue;
+                    }
+                    let t = (apx * abx + apy * aby) / ab_len_sq;
+                    let t_clamped = t.clamp(0.0, 1.0);
+                    let nearest_x = ax + t_clamped * abx;
+                    let nearest_y = ay + t_clamped * aby;
+                    let ddx = px - nearest_x;
+                    let ddy = py - nearest_y;
+                    let d = ddx * ddx + ddy * ddy;
+                    if d < closest_dist_sq {
+                        closest_dist_sq = d;
+                        closest_conn = Some(ci);
+                    }
+                }
+
+                // 阈值：归一化坐标中约 0.03 相当于屏幕上一段距离
+                let threshold = 0.03f64;
+                if let Some(ci) = closest_conn {
+                    if closest_dist_sq < threshold * threshold {
+                        sim.connections.list.remove(ci);
+                        sim.v = None; sim.ex = None; sim.ey = None;
+                        ui.ctx().request_repaint();
+                    }
+                }
+            }
+
+            if mouse_clicked {
+                // 寻找鼠标附近最近的粒子
+                let mut min_dist = f64::MAX;
+                let mut near_particle: Option<usize> = None;
+                for i in 0..sim.particles.len() {
+                    let pu = (sim.particles.x[i] / lx).clamp(0.0, 1.0);
+                    let pv = (sim.particles.y[i] / ly).clamp(0.0, 1.0);
+                    let dx = pu - tex_u as f64;
+                    let dy = pv - tex_v as f64;
+                    let dist = (dx * dx + dy * dy).sqrt();
+                    if dist < min_dist { min_dist = dist; near_particle = Some(i); }
+                }
+
+                if let Some(particle_idx) = near_particle {
+                    if min_dist <= interaction.selection_radius {
+                        if let Some(src_idx) = interaction.connection_source {
+                            if src_idx == particle_idx {
+                                // 点击同一个粒子：取消选择
+                                interaction.connection_source = None;
+                            } else {
+                                // 创建连接
+                                let ax = sim.particles.x[src_idx];
+                                let ay = sim.particles.y[src_idx];
+                                let bx = sim.particles.x[particle_idx];
+                                let by = sim.particles.y[particle_idx];
+                                let current_dist = ((bx - ax).powi(2) + (by - ay).powi(2)).sqrt();
+
+                                let rest_length = if interaction.connection_auto_rest_length {
+                                    current_dist
+                                } else {
+                                    interaction.connection_rest_length
+                                };
+
+                                sim.connections.add(crate::core::connections::Connection {
+                                    particle_a: src_idx,
+                                    particle_b: particle_idx,
+                                    rest_length,
+                                    stiffness: interaction.connection_stiffness,
+                                    connection_type: interaction.connection_type,
+                                });
+
+                                // 重置选择
+                                interaction.connection_source = None;
+                            }
+                        } else {
+                            // 选中第一个粒子
+                            interaction.connection_source = Some(particle_idx);
+                        }
+                        sim.v = None; sim.ex = None; sim.ey = None;
+                        ui.ctx().request_repaint();
+                    }
+                }
+            }
         }
     }
 

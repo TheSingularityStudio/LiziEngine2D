@@ -7,6 +7,7 @@ use crate::core::poisson_solver::{PoissonSolver, compute_e_from_potential_period
 use crate::core::interp::gather_field_to_particles_bilinear;
 use crate::core::integrator::step_half_implicit_euler;
 use crate::core::boundary::{BoundaryType, apply_boundary_conditions, apply_speed_limit};
+use crate::core::connections::Connections;
 
 /// 2D 静电（电场-粒子）CPU 模拟器（PIC 风格实现；单位电荷、单位质量）
 ///
@@ -39,6 +40,8 @@ pub struct ElectrostaticSim2D {
     pub friction_enabled: bool,
     /// 摩擦阻尼系数
     pub friction_damping: f64,
+    /// 粒子间的连接（弹簧/绳子）
+    pub connections: Connections,
     /// 缓存的 Poisson 求解器（带 FFT Handler 预分配）
     poisson_solver: Option<PoissonSolver>,
 }
@@ -47,7 +50,7 @@ impl ElectrostaticSim2D {
     /// 创建新的模拟器实例（使用默认配置：周期边界，最高速度10.0）
     pub fn new(grid: Grid2D, particles: ParticleState, eps_poisson: f64) -> Self {
         Self {
-            poisson_solver: None, // 首次使用时惰性初始化
+            poisson_solver: None,
             grid,
             particles,
             eps_poisson,
@@ -62,6 +65,7 @@ impl ElectrostaticSim2D {
             gravity_y: -9.8,
             friction_enabled: false,
             friction_damping: 0.1,
+            connections: Connections::new(),
         }
     }
 
@@ -89,6 +93,7 @@ impl ElectrostaticSim2D {
             gravity_y: -9.8,
             friction_enabled: false,
             friction_damping: 0.1,
+            connections: Connections::new(),
         }
     }
 
@@ -150,6 +155,9 @@ impl ElectrostaticSim2D {
                 self.particles.fy[i] -= self.friction_damping * self.particles.vy[i];
             }
         }
+
+        // 应用连接力（弹簧/绳子）
+        self.connections.apply_forces(&mut self.particles);
         
         step_half_implicit_euler(&self.grid, &mut self.particles, dt);
         
