@@ -50,29 +50,34 @@ pub fn apply_boundary_conditions(
             }
         }
         BoundaryType::Reflective => {
-            // 反弹边界（完全弹性碰撞）
+            // 反弹边界（完全弹性碰撞），边界向内缩小一个像素
+            let min_x = grid.dx;
+            let max_x = lx - grid.dx;
+            let min_y = grid.dy;
+            let max_y = ly - grid.dy;
+
             for p in 0..particles.len() {
                 // X 方向
-                if particles.x[p] < 0.0 {
-                    particles.x[p] = -particles.x[p];
+                if particles.x[p] < min_x {
+                    particles.x[p] = 2.0 * min_x - particles.x[p];
                     particles.vx[p] = -particles.vx[p];
-                } else if particles.x[p] >= lx {
-                    particles.x[p] = 2.0 * lx - particles.x[p];
+                } else if particles.x[p] >= max_x {
+                    particles.x[p] = 2.0 * max_x - particles.x[p];
                     particles.vx[p] = -particles.vx[p];
                 }
 
                 // Y 方向
-                if particles.y[p] < 0.0 {
-                    particles.y[p] = -particles.y[p];
+                if particles.y[p] < min_y {
+                    particles.y[p] = 2.0 * min_y - particles.y[p];
                     particles.vy[p] = -particles.vy[p];
-                } else if particles.y[p] >= ly {
-                    particles.y[p] = 2.0 * ly - particles.y[p];
+                } else if particles.y[p] >= max_y {
+                    particles.y[p] = 2.0 * max_y - particles.y[p];
                     particles.vy[p] = -particles.vy[p];
                 }
 
                 // 确保粒子在边界内（处理数值误差）
-                particles.x[p] = particles.x[p].clamp(0.0, lx);
-                particles.y[p] = particles.y[p].clamp(0.0, ly);
+                particles.x[p] = particles.x[p].clamp(min_x, max_x);
+                particles.y[p] = particles.y[p].clamp(min_y, max_y);
             }
         }
         BoundaryType::Open => {
