@@ -1,7 +1,8 @@
+use serde::{Deserialize, Serialize};
 use crate::core::particles::ParticleState;
 
 /// 连接类型
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 pub enum ConnectionType {
     /// 弹簧：始终施加胡克定律力（拉伸和压缩）
     Spring,
@@ -19,7 +20,7 @@ impl ConnectionType {
 }
 
 /// 粒子间的连接
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Connection {
     pub particle_a: usize,
     pub particle_b: usize,
@@ -29,7 +30,7 @@ pub struct Connection {
 }
 
 /// 连接集合
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Connections {
     pub list: Vec<Connection>,
 }
