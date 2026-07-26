@@ -201,6 +201,29 @@ fn render_menu_bar(ctx: &egui::Context, state: &mut SimulationState) -> bool {
                 if ui.checkbox(&mut show_heatmap, "显示热力图").changed() { state.show_heatmap = show_heatmap; }
                 let mut show_grid = state.show_grid;
                 if ui.checkbox(&mut show_grid, "显示网格").changed() { state.show_grid = show_grid; }
+                ui.separator();
+                ui.menu_button("高级", |ui| {
+                    ui.label("Poisson 求解器：");
+                    let old_solver_type = state.sim.poisson_solver_type;
+                    for st in PoissonSolverType::all() {
+                        ui.radio_value(&mut state.sim.poisson_solver_type, st, st.display_name());
+                    }
+                    if old_solver_type != state.sim.poisson_solver_type {
+                        state.sim.reset_solver();
+                        state.sim.v = None; state.sim.ex = None; state.sim.ey = None;
+                    }
+                    ui.separator();
+                    if state.sim.poisson_solver_type != PoissonSolverType::FFTPeriodic {
+                        ui.label("Poisson 边界：");
+                        for pb in PoissonBoundaryType::all() {
+                            ui.radio_value(&mut state.sim.poisson_boundary, pb, pb.display_name());
+                        }
+                        ui.label(match state.sim.poisson_boundary {
+                            PoissonBoundaryType::Dirichlet => "边界 V=0（导体壁）",
+                            PoissonBoundaryType::Neumann => "边界电场为零（开路）",
+                        });
+                    }
+                });
             });
             ui.menu_button("帮助", |ui| {
                 if ui.button("关于 LiziEngine2D").clicked() { state.show_about_dialog = true; ui.close_menu(); }
@@ -714,30 +737,6 @@ fn render_right_panel(ctx: &egui::Context, state: &mut SimulationState) {
             let dt = state.variant.config().dt;
             ui.label(format!("dt = {:.2e}", dt));
             if state.paused { ui.label("⏸ 已暂停"); } else { ui.label("▶ 运行中"); }
-
-            ui.add_space(12.0); ui.separator(); ui.add_space(8.0);
-            ui.label("Poisson 求解器：");
-            let old_solver_type = state.sim.poisson_solver_type;
-            for st in PoissonSolverType::all() {
-                ui.radio_value(&mut state.sim.poisson_solver_type, st, st.display_name());
-            }
-            if old_solver_type != state.sim.poisson_solver_type {
-                // 求解器类型改变，重建求解器
-                state.sim.reset_solver();
-                state.sim.v = None; state.sim.ex = None; state.sim.ey = None;
-            }
-            // 非 FFT 求解器时显示边界条件选择
-            if state.sim.poisson_solver_type != PoissonSolverType::FFTPeriodic {
-                ui.add_space(4.0);
-                ui.label("Poisson 边界：");
-                for pb in PoissonBoundaryType::all() {
-                    ui.radio_value(&mut state.sim.poisson_boundary, pb, pb.display_name());
-                }
-                ui.label(match state.sim.poisson_boundary {
-                    PoissonBoundaryType::Dirichlet => "边界 V=0（导体壁）",
-                    PoissonBoundaryType::Neumann => "边界电场为零（开路）",
-                });
-            }
 
             ui.add_space(16.0); ui.separator(); ui.add_space(8.0);
             ui.label("粒子边界：");

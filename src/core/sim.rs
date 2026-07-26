@@ -62,7 +62,7 @@ impl ElectrostaticSim2D {
             v: None,
             ex: None,
             ey: None,
-            boundary_type: BoundaryType::Periodic,
+            boundary_type: BoundaryType::Reflective,
             max_speed: Some(10.0),
             gravity_enabled: false,
             gravity_x: 0.0,
@@ -70,7 +70,7 @@ impl ElectrostaticSim2D {
             friction_enabled: false,
             friction_damping: 0.1,
             connections: Connections::new(),
-            poisson_solver_type: PoissonSolverType::FFTPeriodic,
+            poisson_solver_type: PoissonSolverType::SOR,
             poisson_boundary: PoissonBoundaryType::Dirichlet,
         }
     }
@@ -100,7 +100,7 @@ impl ElectrostaticSim2D {
             friction_enabled: false,
             friction_damping: 0.1,
             connections: Connections::new(),
-            poisson_solver_type: PoissonSolverType::FFTPeriodic,
+            poisson_solver_type: PoissonSolverType::SOR,
             poisson_boundary: PoissonBoundaryType::Dirichlet,
         }
     }
