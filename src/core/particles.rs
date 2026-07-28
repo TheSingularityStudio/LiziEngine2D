@@ -84,7 +84,7 @@ impl ParticleState {
         new_fx.push(0.0);
         new_fy.push(0.0);
         new_q.push(q);
-        new_m.push(mass);
+        new_m.push(mass.max(f64::EPSILON));
         self.x = ndarray::Array1::from_vec(new_x);
         self.y = ndarray::Array1::from_vec(new_y);
         self.vx = ndarray::Array1::from_vec(new_vx);

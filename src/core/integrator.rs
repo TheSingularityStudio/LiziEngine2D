@@ -17,7 +17,7 @@ pub fn step_half_implicit_euler(
 ) {
     for p in 0..particles.len() {
         // v += a * dt (a = F / m)
-        let inv_m = 1.0 / particles.m[p];
+        let inv_m = 1.0 / particles.m[p].max(f64::EPSILON);
         particles.vx[p] += particles.fx[p] * inv_m * dt;
         particles.vy[p] += particles.fy[p] * inv_m * dt;
 

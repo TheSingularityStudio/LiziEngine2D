@@ -955,8 +955,11 @@ fn render_central_canvas(ctx: &egui::Context, state: &mut SimulationState) {
             }
         }
         for p in 0..particle_count {
-            let is_blue = snapshot.q[p] < 0.0;
-            if (is_blue && !state.show_blue_particles) || (!is_blue && !state.show_white_particles) {
+            let q = snapshot.q[p];
+            let is_blue = q < 0.0;
+            let is_neutral = q.abs() < 1e-15;
+            // 中性粒子始终显示；正/负粒子受各自开关控制
+            if !is_neutral && ((is_blue && !state.show_blue_particles) || (!is_blue && !state.show_white_particles)) {
                 continue;
             }
 
@@ -966,7 +969,13 @@ fn render_central_canvas(ctx: &egui::Context, state: &mut SimulationState) {
             let sx = texture_rect.left() + nx_p as f32 * texture_rect.width();
             let sy = texture_rect.bottom() - ny_p as f32 * texture_rect.height();
 
-            let color = if is_blue { egui::Color32::CYAN } else { egui::Color32::WHITE };
+            let color = if is_blue {
+                egui::Color32::CYAN
+            } else if is_neutral {
+                egui::Color32::GRAY
+            } else {
+                egui::Color32::WHITE
+            };
 
             // 高亮悬停的粒子
             let radius = if interaction.tool_mode == ToolMode::Inspect {
