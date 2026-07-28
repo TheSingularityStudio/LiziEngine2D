@@ -27,6 +27,12 @@ pub struct Connection {
     pub rest_length: f64,
     pub stiffness: f64,
     pub connection_type: ConnectionType,
+    /// 弹簧阻尼系数（仅 Spring 类型使用）
+    pub damping: f64,
+    /// 是否启用断裂
+    pub breakable: bool,
+    /// 最大拉伸倍率，超过 rest_length * max_stretch_ratio 时断裂
+    pub max_stretch_ratio: f64,
 }
 
 /// 连接集合
@@ -86,8 +92,11 @@ impl Connections {
 
     /// 应用所有连接的力到粒子受力数组
     /// 在积分前调用，力叠加到 particles.fx/fy
-    pub fn apply_forces(&self, particles: &mut ParticleState) {
-        for conn in &self.list {
+    /// 超过最大拉伸倍率的连接会被自动删除（断裂）
+    pub fn apply_forces(&mut self, particles: &mut ParticleState) {
+        let mut to_remove: Vec<usize> = Vec::new();
+
+        for (idx, conn) in self.list.iter().enumerate() {
             // 获取两个粒子的位置
             let ax = particles.x[conn.particle_a];
             let ay = particles.y[conn.particle_a];
@@ -103,19 +112,27 @@ impl Connections {
                 continue;
             }
 
+            // 断裂检测
+            if conn.breakable && current_length > conn.rest_length * conn.max_stretch_ratio {
+                to_remove.push(idx);
+                continue;
+            }
+
             let dir_x = dx / current_length;
             let dir_y = dy / current_length;
 
-            // 计算弹力大小
             let displacement = current_length - conn.rest_length;
 
             let force_magnitude = match conn.connection_type {
                 ConnectionType::Spring => {
-                    // 弹簧：F = k * displacement，拉伸时拉回，压缩时推回
-                    conn.stiffness * displacement
+                    // 弹簧：F = k * displacement - d * v_rel（阻尼项）
+                    let rel_vx = particles.vx[conn.particle_b] - particles.vx[conn.particle_a];
+                    let rel_vy = particles.vy[conn.particle_b] - particles.vy[conn.particle_a];
+                    let vel_along = rel_vx * dir_x + rel_vy * dir_y; // 沿连线方向的相对速度
+                    conn.stiffness * displacement - conn.damping * vel_along
                 }
                 ConnectionType::Rope => {
-                    // 绳子：仅在拉伸时施加拉力
+                    // 绳子：仅在拉伸时施加拉力，无阻尼
                     if displacement > 0.0 {
                         conn.stiffness * displacement
                     } else {
@@ -132,6 +149,11 @@ impl Connections {
             particles.fy[conn.particle_a] += fy;
             particles.fx[conn.particle_b] -= fx;
             particles.fy[conn.particle_b] -= fy;
+        }
+
+        // 逆序删除断裂的连接
+        for &idx in to_remove.iter().rev() {
+            self.list.remove(idx);
         }
     }
 }

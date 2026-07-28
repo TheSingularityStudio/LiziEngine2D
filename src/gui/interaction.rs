@@ -330,6 +330,12 @@ pub struct InteractionState {
     pub connection_auto_rest_length: bool,
     /// 连接工具：连接类型（弹簧/绳子）
     pub connection_type: ConnectionType,
+    /// 连接工具：弹簧阻尼系数
+    pub connection_damping: f64,
+    /// 连接工具：是否启用断裂
+    pub connection_breakable: bool,
+    /// 连接工具：最大拉伸倍率
+    pub connection_max_stretch_ratio: f64,
 }
 
 impl Default for InteractionState {
@@ -354,6 +360,9 @@ impl Default for InteractionState {
             connection_rest_length: 0.0,
             connection_auto_rest_length: true,
             connection_type: ConnectionType::Spring,
+            connection_damping: 0.5,
+            connection_breakable: false,
+            connection_max_stretch_ratio: 2.0,
         }
     }
 }

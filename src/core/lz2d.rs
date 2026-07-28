@@ -266,6 +266,9 @@ mod tests {
             rest_length: 1.5,
             stiffness: 5.0,
             connection_type: crate::core::connections::ConnectionType::Spring,
+            damping: 0.5,
+            breakable: false,
+            max_stretch_ratio: 2.0,
         });
         let temp_path = std::env::temp_dir().join("test_connections.lz2d");
         let path_str = temp_path.to_string_lossy().to_string();

@@ -715,7 +715,26 @@ fn render_right_panel(ctx: &egui::Context, state: &mut SimulationState) {
                             ui.add(egui::DragValue::new(&mut interaction.connection_rest_length).speed(0.01).suffix(""));
                         });
                     }
-                    ui.add_space(8.0); ui.separator(); ui.add_space(4.0);
+                    ui.add_space(4.0);
+
+                    // 阻尼系数（仅弹簧）
+                    if interaction.connection_type == crate::core::connections::ConnectionType::Spring {
+                        ui.horizontal(|ui| {
+                            ui.label("阻尼系数 d：");
+                            ui.add(egui::DragValue::new(&mut interaction.connection_damping).speed(0.1).suffix(""));
+                        });
+                        ui.add_space(4.0);
+                    }
+
+                    // 断裂设置
+                    ui.checkbox(&mut interaction.connection_breakable, "允许断裂");
+                    if interaction.connection_breakable {
+                        ui.horizontal(|ui| {
+                            ui.label("断裂倍率：");
+                            ui.add(egui::DragValue::new(&mut interaction.connection_max_stretch_ratio).speed(0.1).range(1.0..=10.0).suffix("x"));
+                        });
+                    }
+                    ui.add_space(4.0); ui.separator(); ui.add_space(4.0);
 
                     // 显示当前选中状态
                     if let Some(src_idx) = interaction.connection_source {
@@ -1308,6 +1327,9 @@ fn handle_mouse_interaction(
                                     rest_length,
                                     stiffness: interaction.connection_stiffness,
                                     connection_type: interaction.connection_type,
+                                    damping: interaction.connection_damping,
+                                    breakable: interaction.connection_breakable,
+                                    max_stretch_ratio: interaction.connection_max_stretch_ratio,
                                 });
 
                                 // 重置选择
