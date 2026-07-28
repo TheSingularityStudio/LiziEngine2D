@@ -686,7 +686,6 @@ fn render_right_panel(ctx: &egui::Context, state: &mut SimulationState) {
                     ui.horizontal(|ui| {
                         let is_spring = interaction.connection_type == crate::core::connections::ConnectionType::Spring;
                         if ui.radio_value(&mut interaction.connection_type, crate::core::connections::ConnectionType::Spring, "弹簧").clicked() {
-                            // 如果点击时已是弹簧，再次点击取消
                             if is_spring {
                                 interaction.connection_type = crate::core::connections::ConnectionType::Spring;
                             }
@@ -715,7 +714,26 @@ fn render_right_panel(ctx: &egui::Context, state: &mut SimulationState) {
                             ui.add(egui::DragValue::new(&mut interaction.connection_rest_length).speed(0.01).suffix(""));
                         });
                     }
-                    ui.add_space(8.0); ui.separator(); ui.add_space(4.0);
+                    ui.add_space(4.0);
+
+                    // 阻尼系数（仅弹簧）
+                    if interaction.connection_type == crate::core::connections::ConnectionType::Spring {
+                        ui.horizontal(|ui| {
+                            ui.label("阻尼系数 d：");
+                            ui.add(egui::DragValue::new(&mut interaction.connection_damping).speed(0.1).suffix(""));
+                        });
+                        ui.add_space(4.0);
+                    }
+
+                    // 断裂设置
+                    ui.checkbox(&mut interaction.connection_breakable, "允许断裂");
+                    if interaction.connection_breakable {
+                        ui.horizontal(|ui| {
+                            ui.label("断裂倍率：");
+                            ui.add(egui::DragValue::new(&mut interaction.connection_max_stretch_ratio).speed(0.1).range(1.0..=10.0).suffix("x"));
+                        });
+                    }
+                    ui.add_space(4.0); ui.separator(); ui.add_space(4.0);
 
                     // 显示当前选中状态
                     if let Some(src_idx) = interaction.connection_source {
@@ -735,6 +753,75 @@ fn render_right_panel(ctx: &egui::Context, state: &mut SimulationState) {
                         if ui.button("清空所有连接").clicked() {
                             state.sim.connections.list.clear();
                         }
+                    }
+                }
+                ToolMode::EditParticle => {
+                    ui.label("编辑粒子参数"); ui.add_space(4.0);
+                    ui.label("点击粒子选择要编辑的粒子。"); ui.add_space(8.0);
+                    ui.label("选择半径：");
+                    ui.add(egui::Slider::new(&mut interaction.selection_radius, 0.01..=0.20)
+                        .text("归一化").step_by(0.005));
+                    ui.add_space(8.0);
+
+                    if let Some(idx) = interaction.editing_particle_index {
+                        if idx < state.sim.particles.len() {
+                            ui.separator(); ui.add_space(4.0);
+                            ui.heading(format!("粒子 #{}", idx));
+                            ui.separator(); ui.add_space(4.0);
+
+                            let mut q = state.sim.particles.q[idx];
+                            ui.horizontal(|ui| {
+                                ui.label("电荷量：");
+                                ui.add(egui::DragValue::new(&mut q).speed(0.1).suffix(" q"));
+                            });
+                            if (q - state.sim.particles.q[idx]).abs() > 1e-15 {
+                                state.sim.particles.q[idx] = q;
+                                state.sim.v = None; state.sim.ex = None; state.sim.ey = None;
+                            }
+
+                            let mut mass = state.sim.particles.m[idx];
+                            ui.horizontal(|ui| {
+                                ui.label("质量：");
+                                ui.add(egui::DragValue::new(&mut mass).speed(0.1).suffix(" m"));
+                            });
+                            if (mass - state.sim.particles.m[idx]).abs() > 1e-15 {
+                                state.sim.particles.m[idx] = mass;
+                            }
+
+                            let mut px = state.sim.particles.x[idx];
+                            ui.horizontal(|ui| {
+                                ui.label("位置 X：");
+                                ui.add(egui::DragValue::new(&mut px).speed(0.1).suffix(""));
+                            });
+                            if (px - state.sim.particles.x[idx]).abs() > 1e-15 {
+                                state.sim.particles.x[idx] = px;
+                                state.sim.v = None; state.sim.ex = None; state.sim.ey = None;
+                            }
+
+                            let mut py = state.sim.particles.y[idx];
+                            ui.horizontal(|ui| {
+                                ui.label("位置 Y：");
+                                ui.add(egui::DragValue::new(&mut py).speed(0.1).suffix(""));
+                            });
+                            if (py - state.sim.particles.y[idx]).abs() > 1e-15 {
+                                state.sim.particles.y[idx] = py;
+                                state.sim.v = None; state.sim.ex = None; state.sim.ey = None;
+                            }
+
+                            ui.add_space(4.0);
+                            ui.horizontal(|ui| {
+                                ui.label("速度 Vx：");
+                                ui.add(egui::DragValue::new(&mut state.sim.particles.vx[idx]).speed(0.01).suffix(""));
+                            });
+                            ui.horizontal(|ui| {
+                                ui.label("速度 Vy：");
+                                ui.add(egui::DragValue::new(&mut state.sim.particles.vy[idx]).speed(0.01).suffix(""));
+                            });
+                        } else {
+                            interaction.editing_particle_index = None;
+                        }
+                    } else {
+                        ui.label("未选中粒子");
                     }
                 }
             }
@@ -955,8 +1042,11 @@ fn render_central_canvas(ctx: &egui::Context, state: &mut SimulationState) {
             }
         }
         for p in 0..particle_count {
-            let is_blue = snapshot.q[p] < 0.0;
-            if (is_blue && !state.show_blue_particles) || (!is_blue && !state.show_white_particles) {
+            let q = snapshot.q[p];
+            let is_blue = q < 0.0;
+            let is_neutral = q.abs() < 1e-15;
+            // 中性粒子始终显示；正/负粒子受各自开关控制
+            if !is_neutral && ((is_blue && !state.show_blue_particles) || (!is_blue && !state.show_white_particles)) {
                 continue;
             }
 
@@ -966,7 +1056,13 @@ fn render_central_canvas(ctx: &egui::Context, state: &mut SimulationState) {
             let sx = texture_rect.left() + nx_p as f32 * texture_rect.width();
             let sy = texture_rect.bottom() - ny_p as f32 * texture_rect.height();
 
-            let color = if is_blue { egui::Color32::CYAN } else { egui::Color32::WHITE };
+            let color = if is_blue {
+                egui::Color32::CYAN
+            } else if is_neutral {
+                egui::Color32::GRAY
+            } else {
+                egui::Color32::WHITE
+            };
 
             // 高亮悬停的粒子
             let radius = if interaction.tool_mode == ToolMode::Inspect {
@@ -1299,6 +1395,9 @@ fn handle_mouse_interaction(
                                     rest_length,
                                     stiffness: interaction.connection_stiffness,
                                     connection_type: interaction.connection_type,
+                                    damping: interaction.connection_damping,
+                                    breakable: interaction.connection_breakable,
+                                    max_stretch_ratio: interaction.connection_max_stretch_ratio,
                                 });
 
                                 // 重置选择
@@ -1309,6 +1408,26 @@ fn handle_mouse_interaction(
                             interaction.connection_source = Some(particle_idx);
                         }
                         sim.v = None; sim.ex = None; sim.ey = None;
+                        ui.ctx().request_repaint();
+                    }
+                }
+            }
+        }
+        ToolMode::EditParticle => {
+            if mouse_clicked {
+                let mut min_dist = f64::MAX;
+                let mut min_index = None;
+                for i in 0..sim.particles.len() {
+                    let pu = (sim.particles.x[i] / lx).clamp(0.0, 1.0);
+                    let pv = (sim.particles.y[i] / ly).clamp(0.0, 1.0);
+                    let dx = pu - tex_u as f64;
+                    let dy = pv - tex_v as f64;
+                    let dist = (dx * dx + dy * dy).sqrt();
+                    if dist < min_dist { min_dist = dist; min_index = Some(i); }
+                }
+                if let Some(idx) = min_index {
+                    if min_dist <= interaction.selection_radius {
+                        interaction.editing_particle_index = Some(idx);
                         ui.ctx().request_repaint();
                     }
                 }

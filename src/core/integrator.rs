@@ -16,6 +16,10 @@ pub fn step_half_implicit_euler(
     dt: f64,
 ) {
     for p in 0..particles.len() {
+        // m=0 表示固定粒子，不更新位置和速度
+        if particles.m[p] == 0.0 {
+            continue;
+        }
         // v += a * dt (a = F / m)
         let inv_m = 1.0 / particles.m[p];
         particles.vx[p] += particles.fx[p] * inv_m * dt;
